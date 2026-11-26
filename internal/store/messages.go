@@ -144,7 +144,7 @@ func (s *Store) InsertMessage(ctx context.Context, m *Message, threadKeys []stri
 	err = tx.QueryRowContext(ctx, "SELECT id FROM messages WHERE message_id = ?", m.MessageID).Scan(&existing)
 	if err == nil {
 		_, err = tx.ExecContext(ctx,
-			"UPDATE OR IGNORE messages SET mailbox = ?, uidvalidity = ?, uid = ?, updated_at = ? WHERE id = ?",
+			"UPDATE OR IGNORE messages SET mailbox = ?, uidvalidity = ?, uid = ?, absent = 0, updated_at = ? WHERE id = ?",
 			m.Mailbox, m.UIDValidity, m.UID, ts(time.Now()), existing)
 		if err != nil {
 			return 0, false, err

@@ -5,6 +5,7 @@ package main
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"io"
 	"net"
 	"net/http"
@@ -12,12 +13,14 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"sync"
 	"testing"
 	"time"
 
 	"github.com/Vodki/mailpilot/internal/config"
+	"github.com/Vodki/mailpilot/internal/mailbox"
 	"github.com/Vodki/mailpilot/internal/telegram/tgtest"
 	"github.com/Vodki/mailpilot/internal/web"
 )
@@ -292,4 +295,63 @@ func TestWebEndToEnd(t *testing.T) {
 	if after := unseenCount(t, cfg); after != before+1 {
 		t.Fatalf("\\Seen flags changed while browsing: unseen %d -> %d (one new mail)", before, after)
 	}
+
+	// Phase 6: Louis opens it (marked read), trashes it, then undoes.
+	page := get("/v/urgent")
+	csrf := regexp.MustCompile(`data-csrf="([0-9a-f]+)"`).FindStringSubmatch(page)
+	item := regexp.MustCompile(`data-id="(\d+)">\s*<a href="[^"]*" data-pane>(?s:.*?)` + regexp.QuoteMeta(subject)).FindStringSubmatch(page)
+	if csrf == nil || item == nil {
+		t.Fatalf("csrf or item not found in:\n%s", page)
+	}
+	createFolder(t, cfg, "Trash")
+	act := func(fields url.Values) map[string]any {
+		t.Helper()
+		fields.Set("csrf", csrf[1])
+		fields.Set("id", item[1])
+		req, _ := http.NewRequest("POST", base+"/action", strings.NewReader(fields.Encode()))
+		req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+		req.Header.Set("Accept", "application/json")
+		req.Header.Set("Sec-Fetch-Site", "same-origin")
+		r, err := client.Do(req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer func() { _ = r.Body.Close() }()
+		var res map[string]any
+		_ = json.NewDecoder(r.Body).Decode(&res)
+		if r.StatusCode != http.StatusOK || res["ok"] != true {
+			t.Fatalf("action %v: %d %v", fields, r.StatusCode, res)
+		}
+		return res
+	}
+	act(url.Values{"op": {"lu"}})
+	if after := unseenCount(t, cfg); after != before {
+		t.Fatalf("mark read: unseen %d, want %d", after, before)
+	}
+	if res := act(url.Values{"op": {"corbeille"}}); res["undo"] == nil {
+		t.Fatalf("no undo offered: %v", res)
+	}
+	if strings.Contains(get("/v/inbox"), subject) {
+		t.Fatal("trashed mail still in the inbox")
+	}
+	if !strings.Contains(get("/dossier?f=Trash"), subject) {
+		t.Fatal("trashed mail not in the trash folder")
+	}
+	act(url.Values{"op": {"deplacer"}, "dest": {"INBOX"}})
+	if !strings.Contains(get("/v/urgent"), subject) {
+		t.Fatal("undo did not bring the mail back")
+	}
+}
+
+func createFolder(t *testing.T, cfg *config.Config, name string) {
+	t.Helper()
+	c, err := mailbox.Dial(context.Background(), cfg.IMAP, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = c.Close() }()
+	if err := c.Login(cfg.IMAP.Username, cfg.IMAP.Password.Reveal()).Wait(); err != nil {
+		t.Fatal(err)
+	}
+	_ = c.Create(name, nil).Wait() // may already exist
 }

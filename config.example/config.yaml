@@ -34,6 +34,11 @@ imap:
   # les renseigner, sinon les brouillons sont refusés.
   drafts_folder: ""
   sent_folder: ""
+  # Dossiers des boutons « Archiver » et « Supprimer » de l'interface web,
+  # détectés de la même façon. Supprimer ne fait que déplacer vers la
+  # corbeille : mailpilot n'efface jamais définitivement un mail.
+  archive_folder: ""
+  trash_folder: ""
   save_sent: true        # copie des réponses envoyées dans sent_folder
 
 smtp:
@@ -81,3 +86,4 @@ web:
   allow_remote: false      # true pour écouter ailleurs que sur le loopback (Docker, proxy HTTPS)
   public_url: ""           # https://… si servi derrière un proxy HTTPS (cookies Secure)
   session_ttl: 720h        # durée d'une session (30 jours)
+  mark_read_on_open: true  # marquer lu quand tu ouvres un mail (jamais quand il apparaît dans la liste)

@@ -175,6 +175,30 @@ et te la signale.
 4. Sur téléphone, « Ajouter à l'écran d'accueil » installe l'application
    (PWA). Les pages et les mails ne sont jamais mis en cache sur l'appareil.
 
+Ce que tu peux faire depuis l'interface :
+
+- **Lire** ta boîte de réception et les vues IA. Un mail passe en « lu »
+  seulement quand tu l'ouvres toi-même (`web.mark_read_on_open`, activé par
+  défaut). Le voir dans la liste, recevoir une notification ou l'analyse de
+  l'IA ne le marque jamais lu.
+- **Archiver** (touche `e`), **mettre à la corbeille** (touche `#`),
+  **marquer lu ou non lu** (touche `u`) et **déplacer** vers un dossier.
+  Chaque déplacement propose « Annuler » pendant quelques secondes.
+  mailpilot ne supprime jamais un mail définitivement : « Supprimer » le
+  déplace dans la corbeille, et c'est à toi de la vider depuis ton webmail.
+- **Parcourir tes dossiers** (archives, corbeille, envoyés, tes propres
+  dossiers), lus en direct sur le serveur sans rien y changer. Un mail
+  archivé garde son résumé IA.
+- **Relire un vieux mail** dont mailpilot a effacé le texte après la durée de
+  conservation : il est relu sur le serveur à l'affichage, sans être
+  enregistré de nouveau.
+
+Les dossiers d'archives et de corbeille sont détectés automatiquement
+(SPECIAL-USE, ou un nom courant comme « Archive » ou « Corbeille »). Sinon,
+renseigne `imap.archive_folder` et `imap.trash_folder`. Les mails déplacés
+ou supprimés depuis un autre logiciel disparaissent de la liste en moins
+d'une minute.
+
 Avec Docker, le conteneur doit écouter sur toutes ses interfaces et le port
 n'être publié que sur le loopback de l'hôte : `web.listen: 0.0.0.0:8484`,
 `web.allow_remote: true`, et dans `deploy/docker-compose.yml` la ligne
