@@ -1,0 +1,19 @@
+# Serveur de test local : GreenMail (IMAP + SMTP), utilisateur
+# louis@example.test / secret. Aucun vrai identifiant n'est nécessaire.
+#
+#   make test-env-up && make check-test
+services:
+  greenmail:
+    image: greenmail/standalone:2.1.5
+    environment:
+      GREENMAIL_OPTS: >-
+        -Dgreenmail.setup.test.all
+        -Dgreenmail.hostname=0.0.0.0
+        -Dgreenmail.auth.disabled=false
+        -Dgreenmail.users=louis:secret@example.test,pierre:secret@example.test
+        -Dgreenmail.users.login=email
+    ports:
+      - "3025:3025"  # SMTP
+      - "3143:3143"  # IMAP
+      - "3465:3465"  # SMTPS
+      - "3993:3993"  # IMAPS

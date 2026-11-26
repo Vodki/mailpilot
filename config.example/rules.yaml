@@ -1,0 +1,19 @@
+# Règles de pré-filtrage (phase 2). Évaluées de haut en bas : la première qui
+# correspond s'applique et arrête l'évaluation, sauf `continue: true`.
+# Une règle suivante ne fait alors que compléter les effets non définis.
+rules:
+  - name: patron
+    when: { from: "chef@example.com" }
+    then: { priority: urgent, notify: always }
+
+  - name: notifications-outils
+    when: { from_domain: "notifications.example.com" }
+    then: { skip_llm: true, digest_only: true }
+
+  - name: factures
+    when: { subject_regex: "(?i)facture|invoice", has_attachment: true }
+    then: { extra_instructions: "Extraire montant et date d'échéance.", continue: true }
+
+  - name: copie-seulement
+    when: { addressed: cc }
+    then: { notify: never }

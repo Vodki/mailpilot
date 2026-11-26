@@ -1,0 +1,27 @@
+# Exemple de déploiement sur un VPS. Aucun port n'est exposé : IMAP, SMTP,
+# Telegram (long polling) et le LLM sont des connexions sortantes.
+#
+#   cp .env.example .env && $EDITOR .env
+#   cp -r config.example config && $EDITOR config/config.yaml
+#   docker compose -f deploy/docker-compose.yml up -d --build
+services:
+  mailpilot:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile
+    image: mailpilot:local
+    restart: unless-stopped
+    env_file: ../.env
+    volumes:
+      - ../config:/config:ro
+      - mailpilot-data:/data
+    read_only: true
+    tmpfs:
+      - /tmp
+      - /home/nonroot
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    stop_grace_period: 30s
+
+volumes:
+  mailpilot-data:

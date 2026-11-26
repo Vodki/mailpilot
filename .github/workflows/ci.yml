@@ -1,0 +1,68 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - uses: golangci/golangci-lint-action@v8
+        with:
+          version: v2.15.0
+
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - run: go test -race ./...
+
+  integration:
+    runs-on: ubuntu-latest
+    services:
+      greenmail:
+        image: greenmail/standalone:2.1.5
+        env:
+          GREENMAIL_OPTS: >-
+            -Dgreenmail.setup.test.all -Dgreenmail.hostname=0.0.0.0
+            -Dgreenmail.auth.disabled=false
+            -Dgreenmail.users=louis:secret@example.test,pierre:secret@example.test
+            -Dgreenmail.users.login=email
+        ports:
+          - 3025:3025
+          - 3143:3143
+          - 3465:3465
+          - 3993:3993
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - run: go test -race -tags integration ./...
+      - name: mailpilot check contre GreenMail
+        run: |
+          go build -o bin/mailpilot ./cmd/mailpilot
+          MAILPILOT_IMAP_PASSWORD=secret bin/mailpilot check -config deploy/test/config.yaml -only store,imap,smtp
+
+  docker:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build image
+        run: docker build -f deploy/Dockerfile -t mailpilot:ci .
+      - name: Smoke test
+        run: |
+          docker run --rm mailpilot:ci version
+          docker run --rm --entrypoint /usr/local/bin/claude mailpilot:ci --version
