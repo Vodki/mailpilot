@@ -41,7 +41,12 @@ func (a *App) Reload(_ context.Context) error {
 	if err != nil {
 		return fmt.Errorf("prompts : %w", err)
 	}
+	dr, err := analysis.NewDrafter(a.provider, prompts, a.cfg.Location)
+	if err != nil {
+		return fmt.Errorf("prompts : %w", err)
+	}
 	p := string(profile)
+	a.drafter.Store(dr)
 	a.rules.Store(rs)
 	a.profileText.Store(&p)
 	a.prompts.Store(&prompts)
@@ -132,8 +137,9 @@ func (a *App) isMuted(ctx context.Context, m *store.Message) bool {
 		a.log.Error("mutes", "err", err)
 		return false
 	}
+	thread := threadPattern(m.ThreadID)
 	for _, mu := range mutes {
-		if muteMatches(mu.Pattern, m.From.Email) {
+		if (m.ThreadID > 0 && mu.Pattern == thread) || muteMatches(mu.Pattern, m.From.Email) {
 			return true
 		}
 	}
@@ -189,6 +195,9 @@ func (a *App) listMutes(ctx context.Context) {
 	var b strings.Builder
 	b.WriteString("Sourdines actives :\n")
 	for _, m := range mutes {
+		if strings.HasPrefix(m.Pattern, "thread:") {
+			continue
+		}
 		b.WriteString("• " + m.Pattern)
 		if !m.Until.IsZero() {
 			b.WriteString(" (jusqu'au " + m.Until.In(a.cfg.Location).Format("02/01") + ")")

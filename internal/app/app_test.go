@@ -23,9 +23,10 @@ import (
 
 // scriptedProvider answers by looking for a marker in the prompt.
 type scriptedProvider struct {
-	mu      sync.Mutex
-	answers map[string]string // marker -> JSON
-	calls   []llm.Request
+	mu           sync.Mutex
+	answers      map[string]string // marker -> JSON
+	draftAnswers map[string]string
+	calls        []llm.Request
 }
 
 func (p *scriptedProvider) Name() string { return "scripted" }
@@ -34,6 +35,15 @@ func (p *scriptedProvider) Complete(_ context.Context, r llm.Request) (*llm.Resp
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	p.calls = append(p.calls, r)
+	if r.Task == "draft" {
+		body := `{"body":"Bonjour,\n\nC'est noté.\n\nLouis"}`
+		for marker, out := range p.draftAnswers {
+			if strings.Contains(r.Prompt, marker) {
+				body = out
+			}
+		}
+		return &llm.Response{Output: json.RawMessage(body), Model: "m", CostUSD: 0.03}, nil
+	}
 	for marker, out := range p.answers {
 		if strings.Contains(r.Prompt, marker) {
 			return &llm.Response{Output: json.RawMessage(out), Model: "m", CostUSD: 0.02, Usage: llm.Usage{InputTokens: 100, OutputTokens: 20}}, nil
@@ -78,6 +88,7 @@ type harness struct {
 	mu   sync.Mutex
 	todo *fakeTodo
 	dir  string
+	ops  *fakeOps
 }
 
 func (h *harness) set(t time.Time) { h.mu.Lock(); h.now = t; h.mu.Unlock() }
@@ -112,8 +123,8 @@ func newHarness(t *testing.T, mut ...func(*config.Config)) *harness {
 	}
 	srv := tgtest.New(t)
 	prompts, _ := analysis.LoadPrompts("")
-	prov := &scriptedProvider{answers: map[string]string{}}
-	h := &harness{t: t, st: st, tg: srv, prov: prov, ctx: ctx, w: &fakeWatcher{}, todo: &fakeTodo{}, dir: dir}
+	prov := &scriptedProvider{answers: map[string]string{}, draftAnswers: map[string]string{}}
+	h := &harness{t: t, st: st, tg: srv, prov: prov, ctx: ctx, w: &fakeWatcher{}, todo: &fakeTodo{}, dir: dir, ops: &fakeOps{}}
 	var todo TaskCreator
 	if cfg.Todoist.Enabled {
 		todo = h.todo
@@ -121,7 +132,7 @@ func newHarness(t *testing.T, mut ...func(*config.Config)) *harness {
 	h.set(time.Date(2026, 11, 26, 10, 0, 0, 0, cfg.Location))
 	a, err := New(Deps{
 		Config: &cfg, Store: st, Provider: prov, Prompts: prompts,
-		TG: telegram.New(srv.URL, config.NewSecret("T"), nil), Todoist: todo,
+		TG: telegram.New(srv.URL, config.NewSecret("T"), nil), Todoist: todo, Ops: h.ops,
 		Log: slog.New(slog.NewTextHandler(io.Discard, nil)), Version: "test",
 		Now: h.get,
 	})

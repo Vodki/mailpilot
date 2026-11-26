@@ -29,6 +29,12 @@ imap:
   poll_interval: 90s     # repli si le serveur n'annonce pas IDLE
   bootstrap_days: 7      # import silencieux au premier démarrage
   timeout: 30s
+  # Dossiers des brouillons et des envoyés. Vides : détectés par SPECIAL-USE.
+  # Si le serveur n'annonce pas SPECIAL-USE (voir `mailpilot check`), il faut
+  # les renseigner, sinon les brouillons sont refusés.
+  drafts_folder: ""
+  sent_folder: ""
+  save_sent: true        # copie des réponses envoyées dans sent_folder
 
 smtp:
   host: pro3.mail.ovh.net
@@ -36,6 +42,8 @@ smtp:
   security: starttls
   # username: par défaut, celui d'IMAP
   send_enabled: false    # aucun envoi tant que ce n'est pas true
+  from_name: ""          # nom affiché dans From (ex. Louis Dupont)
+  max_sends_per_hour: 10 # garde-fou contre une boucle
   timeout: 30s
 
 telegram:

@@ -154,7 +154,13 @@ func checkIMAP(ctx context.Context, cfg *config.Config) Result {
 			}
 		}
 	} else {
-		lines = append(lines, "SPECIAL-USE : non, dossiers Brouillons et Envoyés à configurer (phase 3)")
+		lines = append(lines, "SPECIAL-USE : non")
+	}
+	switch {
+	case cfg.IMAP.DraftsFolder != "" && cfg.IMAP.SentFolder != "":
+		lines = append(lines, fmt.Sprintf("Brouillons : %q, Envoyés : %q (configurés)", cfg.IMAP.DraftsFolder, cfg.IMAP.SentFolder))
+	case !res.HasSpecialUse:
+		lines = append(lines, "ATTENTION : renseigne imap.drafts_folder et imap.sent_folder, sinon les brouillons seront refusés")
 	}
 	lines = append(lines, fmt.Sprintf("%s : %d messages, UIDVALIDITY %d, UIDNEXT %d (ouvert en lecture seule)",
 		res.Mailbox, res.NumMessages, res.UIDValidity, res.UIDNext))

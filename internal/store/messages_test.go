@@ -168,7 +168,7 @@ func TestCallbacksSingleUseAndExpiry(t *testing.T) {
 	ctx := context.Background()
 	s := migrated(t)
 	id, _, _ := s.InsertMessage(ctx, msg("a@x", 1), nil, "")
-	tok, err := s.CreateCallback(ctx, "ignore", id, 0, "", time.Hour)
+	tok, err := s.CreateCallback(ctx, "ignore", id, 0, "", time.Now().Add(time.Hour))
 	if err != nil || len(tok) != 32 {
 		t.Fatalf("token %q %v", tok, err)
 	}
@@ -179,7 +179,7 @@ func TestCallbacksSingleUseAndExpiry(t *testing.T) {
 	if _, err := s.ConsumeCallback(ctx, tok, time.Now()); !errors.Is(err, ErrCallbackUsed) {
 		t.Fatalf("reuse: %v", err)
 	}
-	exp, _ := s.CreateCallback(ctx, "send", id, 0, "", time.Minute)
+	exp, _ := s.CreateCallback(ctx, "send", id, 0, "", time.Now().Add(time.Minute))
 	if _, err := s.ConsumeCallback(ctx, exp, time.Now().Add(2*time.Minute)); !errors.Is(err, ErrCallbackExpired) {
 		t.Fatalf("expired: %v", err)
 	}

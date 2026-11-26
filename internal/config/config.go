@@ -55,6 +55,13 @@ type IMAPConfig struct {
 	BootstrapDays      int           `yaml:"bootstrap_days"`
 	InsecureSkipVerify bool          `yaml:"insecure_skip_verify"`
 	Timeout            time.Duration `yaml:"timeout"`
+	// Folders for drafts and sent copies. Empty: detected with SPECIAL-USE;
+	// without SPECIAL-USE they must be set, or drafts are refused.
+	DraftsFolder string `yaml:"drafts_folder"`
+	SentFolder   string `yaml:"sent_folder"`
+	// SaveSent appends a copy of each sent reply to the sent folder (turn
+	// off if the server already does it).
+	SaveSent bool `yaml:"save_sent"`
 
 	Password Secret `yaml:"-"`
 }
@@ -66,6 +73,8 @@ type SMTPConfig struct {
 	Security           Security      `yaml:"security"`
 	Username           string        `yaml:"username"`
 	SendEnabled        bool          `yaml:"send_enabled"`
+	FromName           string        `yaml:"from_name"`
+	MaxSendsPerHour    int           `yaml:"max_sends_per_hour"`
 	InsecureSkipVerify bool          `yaml:"insecure_skip_verify"`
 	Timeout            time.Duration `yaml:"timeout"`
 
@@ -101,7 +110,7 @@ type LLMTask struct {
 	MaxBudgetUSD float64 `yaml:"max_budget_usd"`
 }
 
-// TodoistConfig configures reminders (phase 2).
+// TodoistConfig configures reminders.
 type TodoistConfig struct {
 	Enabled     bool     `yaml:"enabled"`
 	APIBase     string   `yaml:"api_base"`
@@ -149,12 +158,14 @@ func Default() Config {
 			PollInterval:  90 * time.Second,
 			BootstrapDays: 7,
 			Timeout:       30 * time.Second,
+			SaveSent:      true,
 		},
 		SMTP: SMTPConfig{
-			Host:     "pro3.mail.ovh.net",
-			Port:     587,
-			Security: SecurityStartTLS,
-			Timeout:  30 * time.Second,
+			Host:            "pro3.mail.ovh.net",
+			Port:            587,
+			Security:        SecurityStartTLS,
+			Timeout:         30 * time.Second,
+			MaxSendsPerHour: 10,
 		},
 		Telegram: TelegramConfig{APIBase: "https://api.telegram.org"},
 		LLM: LLMConfig{
@@ -303,6 +314,9 @@ func (c *Config) validate() error {
 
 	if c.SMTP.Host == "" || c.SMTP.Port <= 0 {
 		add("smtp.host and smtp.port are required")
+	}
+	if c.SMTP.MaxSendsPerHour < 1 || c.SMTP.MaxSendsPerHour > 100 {
+		add("smtp.max_sends_per_hour must be between 1 and 100")
 	}
 	if c.SMTP.Security != SecurityTLS && c.SMTP.Security != SecurityStartTLS {
 		add("smtp.security must be tls or starttls, got %q", c.SMTP.Security)

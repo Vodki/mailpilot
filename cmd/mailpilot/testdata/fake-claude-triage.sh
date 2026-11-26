@@ -1,8 +1,16 @@
 #!/bin/sh
 # Fake `claude` for the run integration test: answers a triage that is
-# urgent when the prompt contains URGENT-TEST, normal otherwise.
+# urgent when the prompt contains URGENT-TEST, normal otherwise; a fixed
+# body for drafts.
 if [ "$1" = "--version" ]; then echo "2.1.332 (Claude Code)"; exit 0; fi
 prompt=$(cat)
+case "$*" in
+  *"Tu rédiges des brouillons"*)
+    echo '{"type":"system","subtype":"init","tools":["StructuredOutput"],"mcp_servers":[],"model":"claude-opus-5-5"}'
+    printf '%s\n' '{"type":"result","subtype":"success","is_error":false,"result":"","structured_output":{"body":"Bonjour,\n\nC est noté.\n\nLouis"},"total_cost_usd":0.001,"usage":{"input_tokens":10,"output_tokens":5}}'
+    exit 0
+    ;;
+esac
 prio=normale
 case "$prompt" in *URGENT-TEST*) prio=urgent ;; esac
 echo '{"type":"system","subtype":"init","tools":["StructuredOutput"],"mcp_servers":[],"model":"claude-opus-5-5"}'
