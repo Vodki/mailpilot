@@ -30,14 +30,14 @@ func imports(t *testing.T) map[string][]string {
 // Rule 3: no email leaves without the reply package's confirmation flow, so
 // only internal/reply may hold an SMTP client.
 func TestOnlyReplyImportsSMTP(t *testing.T) {
-	allowed := module + "/internal/reply"
+	allowed := map[string]bool{module + "/internal/reply": true, module + "/internal/reply/smtptest": true}
 	for pkg, imps := range imports(t) {
 		for _, imp := range imps {
 			if imp == "net/smtp" {
 				t.Errorf("%s imports net/smtp; use go-smtp inside internal/reply", pkg)
 			}
-			if strings.HasPrefix(imp, "github.com/emersion/go-smtp") && pkg != allowed {
-				t.Errorf("%s imports %s; only %s may", pkg, imp, allowed)
+			if strings.HasPrefix(imp, "github.com/emersion/go-smtp") && !allowed[pkg] {
+				t.Errorf("%s imports %s; only internal/reply may", pkg, imp)
 			}
 		}
 	}

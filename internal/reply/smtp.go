@@ -1,6 +1,7 @@
 // Package reply owns everything that can lead to an outgoing email. It is the
 // only package allowed to import the SMTP client (enforced by
-// internal/archtest). In phase 0 it only knows how to verify credentials.
+// internal/archtest). It computes reply recipients from headers, builds the
+// message and submits it, only after the caller's double confirmation.
 package reply
 
 import (

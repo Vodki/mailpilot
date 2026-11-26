@@ -583,8 +583,9 @@ type Callback struct {
 	UsedAt    time.Time
 }
 
-// CreateCallback stores an action and returns its random token.
-func (s *Store) CreateCallback(ctx context.Context, action string, messagePK, draftPK int64, arg string, ttl time.Duration) (string, error) {
+// CreateCallback stores an action and returns its random token. The token
+// expires at expiresAt (computed with the caller's clock).
+func (s *Store) CreateCallback(ctx context.Context, action string, messagePK, draftPK int64, arg string, expiresAt time.Time) (string, error) {
 	buf := make([]byte, 16)
 	if _, err := rand.Read(buf); err != nil {
 		return "", err
@@ -598,7 +599,7 @@ func (s *Store) CreateCallback(ctx context.Context, action string, messagePK, dr
 		dpk = draftPK
 	}
 	_, err := s.db.ExecContext(ctx, "INSERT INTO callbacks(token, action, message_pk, draft_pk, arg, expires_at) VALUES(?, ?, ?, ?, ?, ?)",
-		token, action, mpk, dpk, arg, ts(time.Now().Add(ttl)))
+		token, action, mpk, dpk, arg, ts(expiresAt))
 	return token, err
 }
 

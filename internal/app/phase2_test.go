@@ -175,16 +175,11 @@ func TestTodoistAutoAndConfirm(t *testing.T) {
 	if !strings.Contains(txt, "1 rappel créé dans Todoist") || !strings.Contains(txt, "1 rappel à confirmer") {
 		t.Fatalf("notification:\n%s", txt)
 	}
-	call := h.tg.Calls("sendMessage")[0].Params
-	kb := call["reply_markup"].(map[string]any)["inline_keyboard"].([]any)
-	if len(kb) != 2 {
-		t.Fatalf("keyboard %v", kb)
+	notif := h.tg.Calls("sendMessage")[0]
+	tok := buttonIn(notif, "➕ Envoyer le planning")
+	if tok == "" || buttonIn(notif, "✖ Pas de rappel") == "" || buttonIn(notif, "➕ Valider") != "" {
+		t.Fatalf("keyboard %v", notif.Params["reply_markup"])
 	}
-	add := kb[0].([]any)[0].(map[string]any)
-	if !strings.Contains(add["text"].(string), "Envoyer le planning") {
-		t.Fatalf("button %v", add)
-	}
-	tok := add["callback_data"].(string)
 
 	// Paused: the click is refused and does not create anything.
 	h.command("/pause")
@@ -197,8 +192,7 @@ func TestTodoistAutoAndConfirm(t *testing.T) {
 	// /rappels re-offers it; clicking creates it once.
 	before := len(h.tg.Calls("sendMessage"))
 	h.command("/rappels")
-	c := h.tg.Calls("sendMessage")[before]
-	tok2 := c.Params["reply_markup"].(map[string]any)["inline_keyboard"].([]any)[0].([]any)[0].(map[string]any)["callback_data"].(string)
+	tok2 := buttonIn(h.tg.Calls("sendMessage")[before], "➕")
 	h.app.Callback(h.ctx, &telegram.CallbackQuery{ID: "2", Data: tok2, Message: &telegram.Message{MessageID: 1}})
 	h.app.Callback(h.ctx, &telegram.CallbackQuery{ID: "3", Data: tok2, Message: &telegram.Message{MessageID: 1}})
 	if h.todo.count() != 2 {

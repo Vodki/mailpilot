@@ -118,7 +118,10 @@ func (a *App) createTask(ctx context.Context, actionID int64, from ...string) er
 	return nil
 }
 
-var errAlreadyHandled = errors.New("déjà traité")
+var (
+	errAlreadyHandled = errors.New("déjà traité")
+	errPaused         = errors.New("en pause")
+)
 
 func (a *App) taskDescription(m *store.Message) string {
 	from := m.From.Email
@@ -165,7 +168,7 @@ func (a *App) actionButtons(ctx context.Context, m *store.Message) [][]telegram.
 		if act.Status != store.ActionProposed && act.Status != store.ActionFailed {
 			continue
 		}
-		tok, err := a.st.CreateCallback(ctx, cbTodoAdd, m.ID, 0, strconv.FormatInt(act.ID, 10), callbackTTL)
+		tok, err := a.st.CreateCallback(ctx, cbTodoAdd, m.ID, 0, strconv.FormatInt(act.ID, 10), a.now().Add(callbackTTL))
 		if err != nil {
 			continue
 		}
@@ -176,7 +179,7 @@ func (a *App) actionButtons(ctx context.Context, m *store.Message) [][]telegram.
 		rows = append(rows, []telegram.Button{{Text: label, CallbackData: tok}})
 	}
 	if len(rows) > 0 {
-		if tok, err := a.st.CreateCallback(ctx, cbTodoDismiss, m.ID, 0, "", callbackTTL); err == nil {
+		if tok, err := a.st.CreateCallback(ctx, cbTodoDismiss, m.ID, 0, "", a.now().Add(callbackTTL)); err == nil {
 			rows = append(rows, []telegram.Button{{Text: "✖ Pas de rappel", CallbackData: tok}})
 		}
 	}
@@ -187,14 +190,16 @@ func (a *App) actionButtons(ctx context.Context, m *store.Message) [][]telegram.
 func (a *App) todoCallback(ctx context.Context, q *telegram.CallbackQuery, c *store.Callback) bool {
 	switch c.Action {
 	case cbTodoAdd:
-		if a.Paused() {
-			_ = a.tg.AnswerCallback(ctx, q.ID, "En pause : /resume d'abord.")
-			a.reissue(ctx, c)
-			return true
-		}
 		id, _ := strconv.ParseInt(c.Arg, 10, 64)
-		err := a.createTask(ctx, id, store.ActionProposed, store.ActionFailed)
+		var err error
+		if a.Paused() {
+			err = errPaused
+		} else {
+			err = a.createTask(ctx, id, store.ActionProposed, store.ActionFailed)
+		}
 		switch {
+		case errors.Is(err, errPaused):
+			_ = a.tg.AnswerCallback(ctx, q.ID, "En pause : /resume d'abord.")
 		case err == nil:
 			_ = a.tg.AnswerCallback(ctx, q.ID, "Rappel créé dans Todoist.")
 		case errors.Is(err, errAlreadyHandled):
@@ -217,12 +222,6 @@ func (a *App) todoCallback(ctx context.Context, q *telegram.CallbackQuery, c *st
 		a.refreshKeyboard(ctx, q.Message.MessageID, c.MessagePK)
 	}
 	return true
-}
-
-// reissue recreates a consumed token so the button keeps working once the
-// refusal reason (pause) is gone.
-func (a *App) reissue(ctx context.Context, c *store.Callback) {
-	_, _ = a.st.CreateCallback(ctx, c.Action, c.MessagePK, c.DraftPK, c.Arg, callbackTTL)
 }
 
 // refreshKeyboard rebuilds the buttons of a notification after an action.

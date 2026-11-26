@@ -23,6 +23,7 @@ import (
 	"github.com/Vodki/mailpilot/internal/imapwatch"
 	"github.com/Vodki/mailpilot/internal/llm/claudecli"
 	"github.com/Vodki/mailpilot/internal/logx"
+	"github.com/Vodki/mailpilot/internal/mailbox"
 	"github.com/Vodki/mailpilot/internal/store"
 	"github.com/Vodki/mailpilot/internal/telegram"
 	"github.com/Vodki/mailpilot/internal/todoist"
@@ -216,6 +217,7 @@ func cmdRun(ctx context.Context, args []string, stderr io.Writer) int {
 	deps := app.Deps{
 		Config: cfg, Store: s, Provider: claudecli.New(cfg.LLM.ClaudeCLI, cfg.LLM.Tasks),
 		Prompts: prompts, TG: tg, Log: log, Version: version,
+		Ops: mailbox.NewOps(cfg.IMAP),
 	}
 	if cfg.Todoist.Enabled {
 		if cfg.Todoist.Token.Empty() {

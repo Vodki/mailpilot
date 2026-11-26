@@ -141,3 +141,38 @@ func TestCheckAgainstGreenMail(t *testing.T) {
 		t.Fatalf("check changed \\Seen flags: unseen %d -> %d", before, after)
 	}
 }
+
+func ensureFolders(t *testing.T, cfg *config.Config, names ...string) {
+	t.Helper()
+	c, err := mailbox.Dial(context.Background(), cfg.IMAP, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = c.Close() }()
+	if err := c.Login(cfg.IMAP.Username, cfg.IMAP.Password.Reveal()).Wait(); err != nil {
+		t.Fatal(err)
+	}
+	for _, n := range names {
+		_ = c.Create(n, nil).Wait() // already exists on reruns
+	}
+}
+
+func countSubject(t *testing.T, ic config.IMAPConfig, folder, subject string) int {
+	t.Helper()
+	c, err := mailbox.Dial(context.Background(), ic, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = c.Close() }()
+	if err := c.Login(ic.Username, "secret").Wait(); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := c.Select(folder, &imap.SelectOptions{ReadOnly: true}).Wait(); err != nil {
+		t.Fatal(err)
+	}
+	res, err := c.UIDSearch(&imap.SearchCriteria{Header: []imap.SearchCriteriaHeaderField{{Key: "Subject", Value: subject}}}, nil).Wait()
+	if err != nil {
+		t.Fatal(err)
+	}
+	return len(res.AllUIDs())
+}

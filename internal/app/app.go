@@ -18,6 +18,7 @@ import (
 	"github.com/Vodki/mailpilot/internal/config"
 	"github.com/Vodki/mailpilot/internal/imapwatch"
 	"github.com/Vodki/mailpilot/internal/llm"
+	"github.com/Vodki/mailpilot/internal/reply"
 	"github.com/Vodki/mailpilot/internal/rules"
 	"github.com/Vodki/mailpilot/internal/store"
 	"github.com/Vodki/mailpilot/internal/telegram"
@@ -52,6 +53,8 @@ type Deps struct {
 	Prompts  analysis.Prompts
 	TG       Notifier
 	Todoist  TaskCreator // nil disables reminders
+	Ops      MailOps     // nil disables drafts
+	Send     SendFunc    // nil = reply.Send
 	Log      *slog.Logger
 	Version  string
 	Now      func() time.Time
@@ -65,6 +68,10 @@ type App struct {
 	analyzer atomic.Pointer[analysis.Analyzer]
 	tg       Notifier
 	todo     TaskCreator // nil when Todoist is disabled
+	ops      MailOps     // IMAP writes (drafts, sent, \Seen); nil disables drafts
+	sendMail SendFunc
+	drafter  atomic.Pointer[analysis.Drafter]
+	drafts   draftState
 	log      *slog.Logger
 	version  string
 	now      func() time.Time
@@ -95,13 +102,21 @@ func New(d Deps) (*App, error) {
 		return nil, err
 	}
 	a := &App{
-		cfg: d.Config, st: d.Store, provider: d.Provider, tg: d.TG, todo: d.Todoist,
+		cfg: d.Config, st: d.Store, provider: d.Provider, tg: d.TG, todo: d.Todoist, ops: d.Ops, sendMail: d.Send,
 		log: d.Log, version: d.Version, now: d.Now, started: d.Now(),
 		self:  map[string]bool{strings.ToLower(d.Config.IMAP.Username): true},
 		queue: make(chan int64, 1024),
 	}
 	a.analyzer.Store(an)
 	a.prompts.Store(&d.Prompts)
+	if a.sendMail == nil {
+		a.sendMail = reply.Send
+	}
+	dr, err := analysis.NewDrafter(d.Provider, d.Prompts, d.Config.Location)
+	if err != nil {
+		return nil, err
+	}
+	a.drafter.Store(dr)
 	for _, s := range d.Config.SelfAliases {
 		a.self[strings.ToLower(strings.TrimSpace(s))] = true
 	}

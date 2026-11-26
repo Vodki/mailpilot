@@ -25,6 +25,7 @@ func (a *App) afterInsert(context.Context, int64, *store.Message) {}
 // afterAnalysis runs before delivery.
 func (a *App) afterAnalysis(ctx context.Context, m *store.Message, t *analysis.Triage, eff effects) {
 	a.handleActions(ctx, m, t, eff)
+	a.maybeAutoDraft(ctx, m, t, eff)
 }
 
 // notifyLines adds feature lines to an immediate notification.
@@ -35,6 +36,7 @@ func (a *App) notifyLines(ctx context.Context, m *store.Message) []string {
 // messageKeyboard returns the inline buttons of a notification.
 func (a *App) messageKeyboard(ctx context.Context, m *store.Message, _ *analysis.Triage) *telegram.InlineMarkup {
 	var rows [][]telegram.Button
+	rows = append(rows, a.messageButtons(ctx, m)...)
 	rows = append(rows, a.actionButtons(ctx, m)...)
 	if len(rows) == 0 {
 		return nil
@@ -57,6 +59,7 @@ func (a *App) extCommands() []telegram.BotCommand {
 		{Command: "unmute", Description: "Annuler une sourdine"},
 		{Command: "rappels", Description: "Rappels Todoist à confirmer"},
 		{Command: "reload", Description: "Recharger règles, profil et prompts"},
+		{Command: "annuler", Description: "Abandonner la modification d'un brouillon"},
 	}
 }
 
@@ -71,6 +74,8 @@ func (a *App) extCommand(ctx context.Context, name, args string, m *telegram.Mes
 		a.cmdReminders(ctx)
 	case "reload":
 		a.ReloadAndReport(ctx)
+	case "annuler", "cancel":
+		a.cancelEdit(ctx)
 	default:
 		return false
 	}
@@ -98,9 +103,9 @@ func (a *App) extStatus(ctx context.Context) []string {
 }
 
 // extText handles free text; false if not consumed.
-func (a *App) extText(context.Context, *telegram.Message) bool { return false }
+func (a *App) extText(ctx context.Context, m *telegram.Message) bool { return a.draftText(ctx, m) }
 
 // extCallback handles a consumed callback token; false if unknown.
 func (a *App) extCallback(ctx context.Context, q *telegram.CallbackQuery, c *store.Callback) bool {
-	return a.todoCallback(ctx, q, c)
+	return a.todoCallback(ctx, q, c) || a.draftCallback(ctx, q, c)
 }
