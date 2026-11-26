@@ -1,0 +1,154 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<title>mailpilot démo</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Noto+Color+Emoji&display=block" rel="stylesheet">
+<style>
+:root{
+  --bg:#0f1420; --panel:#161d2c; --line:#26304a; --text:#e6ebf5; --muted:#8a96b2;
+  --term:#0b0f17; --ok:#4ade80; --warn:#fbbf24; --err:#f87171; --cmd:#7dd3fc; --log:#a5b4cf;
+  --tg-bg:#0e1621; --tg-head:#17212b; --bubble:#182533; --mine:#2b5278; --btn:#22303f; --accent:#5eb5f7;
+}
+*{box-sizing:border-box}
+html,body{margin:0;height:100%;background:var(--bg);color:var(--text);
+  font-family:Inter,"Noto Color Emoji",sans-serif;overflow:hidden}
+.app{display:grid;grid-template-rows:56px 1fr 86px;height:100vh;gap:0}
+header{display:flex;align-items:center;justify-content:space-between;padding:0 24px;border-bottom:1px solid var(--line);background:#121827}
+.brand{font-weight:800;font-size:22px;letter-spacing:-.02em}
+.brand span{color:var(--accent)}
+.demo-pill{background:#3b2a08;color:#fcd34d;border:1px solid #a16207;border-radius:999px;padding:7px 16px;font-size:14px;font-weight:600}
+main{display:grid;grid-template-columns:1fr 520px;gap:18px;padding:18px 24px;min-height:0}
+.left{display:grid;grid-template-rows:1fr 190px;gap:18px;min-height:0}
+.win{background:var(--panel);border:1px solid var(--line);border-radius:12px;overflow:hidden;display:flex;flex-direction:column;min-height:0}
+.win-title{height:34px;display:flex;align-items:center;gap:8px;padding:0 14px;background:#1b2336;border-bottom:1px solid var(--line);font-size:13px;color:var(--muted);font-weight:500}
+.dots i{display:inline-block;width:11px;height:11px;border-radius:50%;margin-right:6px}
+.term{flex:1;background:var(--term);padding:12px 16px;font-family:"JetBrains Mono",monospace;font-size:13.5px;line-height:1.5;overflow:hidden;display:flex;flex-direction:column;justify-content:flex-end}
+.term div{white-space:pre-wrap;word-break:break-all}
+.term .cmd{color:var(--cmd);font-weight:700}
+.term .ok{color:var(--ok)} .term .warn{color:var(--warn)} .term .err{color:var(--err)}
+.term .out{color:#d5dbe8} .term .log{color:var(--log);font-size:12.5px}
+.cursor{display:inline-block;width:8px;height:16px;background:var(--cmd);vertical-align:-3px;animation:blink 1s steps(1) infinite}
+@keyframes blink{50%{opacity:0}}
+.cards{display:grid;grid-template-columns:1fr 1fr;gap:18px;min-height:0}
+.list{padding:10px 14px;overflow:hidden;display:flex;flex-direction:column;gap:7px;font-size:14px;flex:1;justify-content:flex-end}
+.item{display:flex;gap:10px;align-items:baseline;animation:pop .35s ease-out}
+.item .t{color:var(--muted);font-size:12px;min-width:38px;font-variant-numeric:tabular-nums}
+.item .who{font-weight:600;white-space:nowrap}
+.item .s{color:#c3cbe0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.item.pierre .who{color:#86efac}
+.empty{color:var(--muted);font-style:italic;font-size:13px}
+.chk{width:16px;height:16px;border:2px solid #e44332;border-radius:50%;flex:none;align-self:center}
+/* Telegram */
+.tg{background:var(--tg-bg);border:1px solid var(--line);border-radius:12px;display:flex;flex-direction:column;overflow:hidden;min-height:0}
+.tg-head{background:var(--tg-head);padding:10px 16px;display:flex;align-items:center;gap:12px;border-bottom:1px solid #0b1118}
+.avatar{width:40px;height:40px;border-radius:50%;background:linear-gradient(135deg,#5eb5f7,#2b5278);display:grid;place-items:center;font-size:20px}
+.tg-name{font-weight:700;font-size:15px}
+.tg-sub{font-size:12.5px;color:#6c8aa6}
+.tg-sim{margin-left:auto;font-size:11.5px;color:#fcd34d;border:1px solid #a16207;border-radius:6px;padding:3px 8px}
+.msgs{flex:1;padding:14px 14px 10px;display:flex;flex-direction:column;justify-content:flex-end;gap:8px;overflow:hidden;
+  background:radial-gradient(circle at 20% 10%,#13202e 0,transparent 40%),var(--tg-bg)}
+.msg{max-width:88%;animation:pop .3s ease-out}
+.msg .b{padding:8px 12px 6px;border-radius:14px;font-size:14.2px;line-height:1.42;white-space:pre-wrap;word-wrap:break-word}
+.msg.bot{align-self:flex-start} .msg.bot .b{background:var(--bubble);border-bottom-left-radius:4px}
+.msg.me{align-self:flex-end} .msg.me .b{background:var(--mine);border-bottom-right-radius:4px}
+.msg .meta{font-size:11px;color:#6c8aa6;text-align:right;margin-top:2px}
+.msg.note{align-self:center;max-width:95%}
+.msg.note .b{background:#3a1d1d;color:#fecaca;border:1px dashed #b91c1c;font-size:13px;border-radius:10px}
+.kb{display:grid;gap:4px;margin-top:4px}
+.kb .row{display:flex;gap:4px}
+.kb .btn{flex:1;background:var(--btn);border-radius:8px;padding:7px 8px;text-align:center;font-size:13.2px;font-weight:500;color:#dfe8f2;transition:all .2s}
+.kb .btn.pressed{background:var(--accent);color:#06243a;transform:scale(.96);box-shadow:0 0 0 3px #5eb5f755}
+.typing{align-self:flex-start;background:var(--bubble);border-radius:14px;padding:10px 14px;display:none}
+.typing.on{display:block}
+.typing i{display:inline-block;width:7px;height:7px;border-radius:50%;background:#6c8aa6;margin:0 2px;animation:dot 1.2s infinite}
+.typing i:nth-child(2){animation-delay:.2s}.typing i:nth-child(3){animation-delay:.4s}
+@keyframes dot{0%,60%,100%{opacity:.3;transform:translateY(0)}30%{opacity:1;transform:translateY(-3px)}}
+.toast{position:absolute;top:70px;left:50%;transform:translateX(-50%);background:#000c;padding:8px 14px;border-radius:8px;font-size:13px;opacity:0;transition:opacity .3s}
+.toast.on{opacity:1}
+@keyframes pop{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+/* caption */
+footer{display:flex;align-items:center;gap:18px;padding:0 24px;background:#121827;border-top:1px solid var(--line)}
+.step{flex:none;background:var(--accent);color:#06243a;font-weight:800;border-radius:10px;padding:8px 12px;font-size:16px;font-variant-numeric:tabular-nums}
+.cap{font-size:20px;font-weight:600;line-height:1.3;transition:opacity .3s}
+.overlay{position:fixed;inset:0;background:radial-gradient(circle at 50% 40%,#1c2a45,#0b0f17 70%);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;opacity:0;pointer-events:none;transition:opacity .6s;text-align:center}
+.overlay.on{opacity:1}
+.overlay h1{margin:0;font-size:84px;font-weight:800;letter-spacing:-.04em}
+.overlay h1 span{color:var(--accent)}
+.overlay h2{margin:0;font-size:32px;font-weight:600;color:#c3cbe0}
+.overlay p{margin:18px 0 0;font-size:20px;color:#fcd34d;white-space:pre-line;line-height:1.5;border:1px solid #a16207;background:#3b2a0880;padding:14px 26px;border-radius:12px}
+</style>
+</head>
+<body>
+<div class="app">
+  <header>
+    <div class="brand">mail<span>pilot</span></div>
+    <div class="demo-pill">⚠️ DÉMO · environnement de test · GreenMail local, Telegram, Claude et Todoist simulés · aucun vrai identifiant</div>
+  </header>
+  <main>
+    <div class="left">
+      <div class="win">
+        <div class="win-title"><span class="dots"><i style="background:#ff5f57"></i><i style="background:#febc2e"></i><i style="background:#28c840"></i></span>louis@demo : ~/mailpilot</div>
+        <div class="term" id="term"></div>
+      </div>
+      <div class="cards">
+        <div class="win">
+          <div class="win-title">📥 Boîtes mail de test (GreenMail)</div>
+          <div class="list" id="mails"><div class="empty">Boîte de réception vide</div></div>
+        </div>
+        <div class="win">
+          <div class="win-title">✅ Todoist (simulé)</div>
+          <div class="list" id="tasks"><div class="empty">Aucune tâche</div></div>
+        </div>
+      </div>
+    </div>
+    <div class="tg" style="position:relative">
+      <div class="tg-head"><div class="avatar">🤖</div><div><div class="tg-name">mailpilot</div><div class="tg-sub">bot</div></div><div class="tg-sim">Telegram simulé</div></div>
+      <div class="msgs" id="msgs"><div class="typing" id="typing"><i></i><i></i><i></i></div></div>
+      <div class="toast" id="toast"></div>
+    </div>
+  </main>
+  <footer><div class="step" id="step">0/9</div><div class="cap" id="cap">Préparation…</div></footer>
+</div>
+<div class="overlay" id="overlay"><h1>mail<span>pilot</span></h1><h2 id="ov2"></h2><p id="ov3"></p></div>
+<script>
+const $=id=>document.getElementById(id);
+const esc=s=>s.replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));
+function rich(text,ents){
+  ents=(ents||[]).filter(e=>['bold','italic','code'].includes(e.type)).sort((a,b)=>a.offset-b.offset);
+  let out='',pos=0;
+  for(const e of ents){ if(e.offset<pos)continue;
+    out+=esc(text.slice(pos,e.offset));
+    const tag={bold:'b',italic:'i',code:'code'}[e.type];
+    out+=`<${tag}>`+esc(text.slice(e.offset,e.offset+e.length))+`</${tag}>`; pos=e.offset+e.length;}
+  return out+esc(text.slice(pos));
+}
+let last={},toastTimer;
+function render(s){
+  const k=x=>JSON.stringify(x);
+  if(k(s.term)!==last.term){last.term=k(s.term);
+    const lines=s.term.slice(-60);
+    $('term').innerHTML=lines.map((l,i)=>`<div class="${l.cls}">${esc(l.text)}${i===lines.length-1&&l.cls==='cmd'?'<span class="cursor"></span>':''}</div>`).join('');}
+  if(k(s.chat)!==last.chat){last.chat=k(s.chat);
+    const html=s.chat.slice(-14).map(m=>{
+      const kb=(m.buttons||[]).length?`<div class="kb">${m.buttons.map(r=>`<div class="row">${r.map(b=>`<div class="btn ${b.pressed?'pressed':''}">${esc(b.text)}</div>`).join('')}</div>`).join('')}</div>`:'';
+      return `<div class="msg ${m.from}"><div class="b">${m.from==='bot'?rich(m.text,m.entities):esc(m.text)}<div class="meta">${m.edited?'modifié · ':''}${m.time}${m.from==='me'?' ✓✓':''}</div></div>${kb}</div>`;}).join('');
+    const typing=$('typing'); $('msgs').innerHTML=html; $('msgs').appendChild(typing);}
+  $('typing').classList.toggle('on',!!s.thinking);
+  if(k(s.mails)!==last.mails){last.mails=k(s.mails);
+    if(s.mails.length)$('mails').innerHTML=s.mails.slice(-6).map(m=>`<div class="item ${m.box}"><span class="t">${m.time}</span><span class="who">${m.box==='pierre'?'→ Pierre : ':''}${esc(m.from)}</span><span class="s">${esc(m.subject)}</span></div>`).join('');}
+  if(k(s.tasks)!==last.tasks){last.tasks=k(s.tasks);
+    if(s.tasks.length)$('tasks').innerHTML=s.tasks.map(t=>`<div class="item"><span class="chk"></span><span class="s" style="white-space:normal">${esc(t.content)}</span><span class="t" style="margin-left:auto;color:#e44332;white-space:nowrap">${esc(t.due||'')}</span></div>`).join('');}
+  $('step').textContent=(s.step||0)+'/'+s.steps;
+  if(s.caption!==last.cap){last.cap=s.caption;const c=$('cap');c.style.opacity=0;setTimeout(()=>{c.textContent=s.caption||'';c.style.opacity=1},250);}
+  if(s.toast&&s.toast!==last.toast){last.toast=s.toast;const t=$('toast');t.textContent=s.toast;t.classList.add('on');clearTimeout(toastTimer);toastTimer=setTimeout(()=>t.classList.remove('on'),2200);}
+  const ov=$('overlay');
+  if(s.overlay){$('ov2').textContent=s.overlay[1];$('ov3').textContent=s.overlay[2];ov.classList.add('on');} else ov.classList.remove('on');
+  window.demoDone=s.done;
+}
+async function tick(){try{render(await (await fetch('/state')).json())}catch(e){} setTimeout(tick,100)}
+document.fonts.ready.then(()=>{fetch('/start');tick();});
+</script>
+</body>
+</html>
