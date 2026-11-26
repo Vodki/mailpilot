@@ -11,7 +11,7 @@
 <link rel="stylesheet" href="/static/app.css">
 <script src="/static/app.js" defer></script>
 </head>
-<body class="{{if .Pane}}has-pane{{end}}" data-view="{{.View}}" data-csrf="{{.CSRF}}">
+<body class="{{if or .Pane .Composer}}has-pane{{end}}" data-view="{{.View}}" data-csrf="{{.CSRF}}">
 <header class="top">
   <a class="brand" href="/v/inbox" aria-label="mailpilot, boîte de réception">
     <svg class="logo" aria-hidden="true"><use href="/static/icons.svg#logo"></use></svg><span>mail<b>pilot</b></span>
@@ -26,7 +26,7 @@
 <div class="shell">
   <nav class="side" id="nav">{{template "nav" .}}</nav>
   <section class="list" id="list" aria-label="{{.ViewTitle}}">{{template "listcol" .}}</section>
-  <main class="pane" id="pane">{{template "pane" .}}</main>
+  <main class="pane" id="pane">{{if .Composer}}{{template "composer" .Composer}}{{else}}{{template "pane" .}}{{end}}</main>
 </div>
 <div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
 <dialog id="confirm" class="confirm-dialog" aria-label="Confirmer l'envoi"></dialog>
@@ -34,6 +34,7 @@
 </html>{{end}}
 
 {{define "nav"}}
+  {{if .CanCompose}}<a class="new-mail" href="/ecrire"><svg aria-hidden="true"><use href="/static/icons.svg#draft"></use></svg><span>Nouveau message</span></a>{{end}}
   <div class="nav-group">
   {{range .Views}}{{if not .AI}}
     <a class="nav-item{{if .Active}} active{{end}}" href="/v/{{.Name}}"><svg aria-hidden="true"><use href="/static/icons.svg#{{.Icon}}"></use></svg><span>{{.Title}}</span><em>{{.Count}}</em></a>
@@ -147,6 +148,7 @@
     <div class="toolbar" role="toolbar" aria-label="Actions"{{if .MarkOnOpen}} data-mark-on-open{{end}}>
       {{if not .InArchive}}<form method="post" action="/action">{{template "actfields" .}}<input type="hidden" name="op" value="archiver"><button type="submit" class="tool" data-key="e" title="Archiver (e)" aria-label="Archiver"><svg aria-hidden="true"><use href="/static/icons.svg#archive"></use></svg><span>Archiver</span></button></form>{{end}}
       {{if not .InTrash}}<form method="post" action="/action">{{template "actfields" .}}<input type="hidden" name="op" value="corbeille"><button type="submit" class="tool" data-key="#" title="Mettre à la corbeille (#)" aria-label="Mettre à la corbeille"><svg aria-hidden="true"><use href="/static/icons.svg#trash"></use></svg><span>Supprimer</span></button></form>{{end}}
+      {{if and .CanReply .ID}}<a class="tool" href="/ecrire?transferer={{.ID}}" title="Transférer" aria-label="Transférer"><svg aria-hidden="true"><use href="/static/icons.svg#send"></use></svg><span>Transférer</span></a>{{end}}
       <form method="post" action="/action">{{template "actfields" .}}<input type="hidden" name="op" value="{{if .Unread}}lu{{else}}nonlu{{end}}"><button type="submit" class="tool" data-key="u" data-seen-toggle title="{{if .Unread}}Marquer comme lu{{else}}Marquer comme non lu{{end}} (u)" aria-label="{{if .Unread}}Marquer comme lu{{else}}Marquer comme non lu{{end}}"><svg aria-hidden="true"><use href="/static/icons.svg#{{if .Unread}}mailopen{{else}}mail{{end}}"></use></svg><span>{{if .Unread}}Marquer lu{{else}}Non lu{{end}}</span></button></form>
       {{if .Moves}}<form method="post" action="/action" class="move">{{template "actfields" .}}<input type="hidden" name="op" value="deplacer"><svg aria-hidden="true"><use href="/static/icons.svg#move"></use></svg><select name="dest" aria-label="Déplacer vers" data-key="v">{{range .Moves}}<option value="{{.Name}}">{{.Title}}</option>{{end}}</select><button type="submit" class="tool">Déplacer</button></form>{{end}}
     </div>
@@ -194,13 +196,56 @@
 
 {{define "confirm"}}
   <form method="dialog" class="confirm-close"><button class="ghost" aria-label="Fermer">✕</button></form>
-  <h2>Envoyer cette réponse ?</h2>
+  <h2>{{.C.Title}}</h2>
   <dl class="confirm-meta"><dt>À</dt><dd>{{.C.To}}</dd>{{if .C.Cc}}<dt>Cc</dt><dd>{{.C.Cc}}</dd>{{end}}<dt>Objet</dt><dd>{{.C.Subject}}</dd></dl>
   {{if .C.ReplyToElsewhere}}<p class="alert small">{{.C.ReplyToElsewhere}}</p>{{end}}
   <div class="confirm-body">{{.C.Body}}</div>
-  <p class="muted small">Brouillon v{{.C.Version}}, exactement tel qu'affiché, suivi du message cité. Cette confirmation ne sert qu'une fois et expire dans 10 minutes.</p>
+  <p class="muted small">Version {{.C.Version}}, exactement telle qu'affichée{{if .C.Quoted}}, suivie du message cité{{end}}{{if .C.Forward}}, suivie du mail transféré (sans ses pièces jointes){{end}}. Cette confirmation ne sert qu'une fois et expire dans 10 minutes.</p>
   <div class="compose-row">
     <form method="post" action="/envoi/confirmer" data-ajax data-busy="Envoi…"><input type="hidden" name="csrf" value="{{.CSRF}}"><input type="hidden" name="token" value="{{.C.Token}}"><button type="submit">Oui, envoyer</button></form>
     <form method="dialog"><button class="ghost">Annuler</button></form>
   </div>
+{{end}}
+
+{{define "composer"}}
+  <article class="mail composer-page">
+    <a class="back" href="/v/inbox" data-back>← Retour</a>
+    <h2 class="mail-subject">{{if .Sent}}Message envoyé{{else if .Forward}}Transférer{{else}}Nouveau message{{end}}</h2>
+    {{if .Error}}<p class="alert small">{{.Error}}</p>{{end}}
+    {{if .Sent}}<p class="muted">Ce message a été envoyé à {{.To}}.</p>{{else}}
+    <section class="compose composer" aria-label="Écrire">
+      <div class="compose-head">{{if .ID}}<span class="chip draft">Brouillon v{{.Version}}</span>{{if .InDrafts}}<span class="muted small">enregistré dans Brouillons</span>{{end}}{{else}}<span class="muted small">Pas encore enregistré</span>{{end}}</div>
+      <form method="post" action="/ecrire" class="editor" data-compose>
+        <input type="hidden" name="csrf" value="{{.CSRF}}">{{if .ID}}<input type="hidden" name="c" value="{{.ID}}">{{else if .Forward}}<input type="hidden" name="transferer" value="{{.Forward}}">{{end}}
+        <label class="field"><span>À</span><input type="text" name="to" value="{{.To}}" required autocomplete="email" placeholder="Pierre Lambert &lt;pierre@exemple.fr&gt;, marie@exemple.fr" maxlength="2000"></label>
+        <label class="field"><span>Cc</span><input type="text" name="cc" value="{{.Cc}}" autocomplete="email" maxlength="2000"></label>
+        <label class="field"><span>Objet</span><input type="text" name="subject" value="{{.Subject}}" maxlength="500"></label>
+        <textarea name="body" rows="12" aria-label="Texte du message" maxlength="100000">{{.Body}}</textarea>
+        <div class="compose-row"><button type="submit" class="tool">Enregistrer le brouillon</button>
+          <span class="muted small">Sépare les adresses par des virgules. Elles sont vérifiées à l'enregistrement.</span></div>
+      </form>
+      {{if .ID}}
+      <div class="compose-row send-row">
+        <form method="post" action="/envoi/preparer" class="send-form"><input type="hidden" name="csrf" value="{{.CSRF}}"><input type="hidden" name="kind" value="c"><input type="hidden" name="draft" value="{{.ID}}"><input type="hidden" name="version" value="{{.Version}}">
+          <button type="submit"{{if .SendBlocked}} disabled{{end}}><svg aria-hidden="true"><use href="/static/icons.svg#send"></use></svg> Envoyer…</button></form>
+        <form method="post" action="/ecrire" data-compose><input type="hidden" name="csrf" value="{{.CSRF}}"><input type="hidden" name="c" value="{{.ID}}"><input type="hidden" name="op" value="abandonner"><button type="submit" class="ghost">Supprimer le brouillon</button></form>
+      </div>
+      {{if .SendBlocked}}<p class="muted small send-blocked">{{.SendBlocked}}</p>{{end}}
+      {{else}}<p class="muted small">Enregistre le brouillon pour pouvoir l'envoyer.</p>{{end}}
+    </section>
+    {{end}}
+    {{with .Source}}
+    <section class="forwarded" aria-label="Mail transféré">
+      <h3>Mail transféré{{if .Attachments}} <span class="muted small">(sans ses pièces jointes)</span>{{end}}</h3>
+      <div class="small"><b>{{if .From.Name}}{{.From.Name}}{{else}}{{.From.Email}}{{end}}</b> <span class="muted">· {{.Date}}</span></div>
+      <div class="small">{{.Subject}}</div>
+      <div class="body">{{.Body}}</div>
+    </section>
+    {{end}}
+    {{if .Drafts}}
+    <section class="thread"><h3>Brouillons en cours</h3>
+      <ul>{{range .Drafts}}<li{{if .Current}} class="current"{{end}}><a href="{{.Href}}"><span class="from">{{.Title}}</span><span class="time">{{.When}}</span><span class="summary">À : {{.To}}</span></a></li>{{end}}</ul>
+    </section>
+    {{end}}
+  </article>
 {{end}}

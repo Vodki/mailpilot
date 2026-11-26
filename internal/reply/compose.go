@@ -136,28 +136,6 @@ func Build(o Original, from Addr, to, cc []Addr, body string, now time.Time, loc
 		orig = ""
 	}
 
-	var h bytes.Buffer
-	hdr := func(k, v string) { fmt.Fprintf(&h, "%s: %s\r\n", k, v) }
-	hdr("From", addrHeader(from))
-	hdr("To", addrList(to))
-	if len(cc) > 0 {
-		hdr("Cc", addrList(cc))
-	}
-	hdr("Subject", mime.QEncoding.Encode("utf-8", d.Subject))
-	hdr("Date", now.In(loc).Format(time.RFC1123Z))
-	hdr("Message-ID", "<"+d.MessageID+">")
-	if orig != "" {
-		hdr("In-Reply-To", "<"+orig+">")
-	}
-	if len(refs) > 0 {
-		hdr("References", strings.Join(refs, " "))
-	}
-	hdr("MIME-Version", "1.0")
-	hdr("Content-Type", "text/plain; charset=utf-8")
-	hdr("Content-Transfer-Encoding", "quoted-printable")
-	hdr("User-Agent", "mailpilot")
-	h.WriteString("\r\n")
-
 	text := strings.TrimSpace(strings.ReplaceAll(body, "\r\n", "\n"))
 	if q := strings.TrimSpace(o.QuoteText); q != "" {
 		name := o.From.Name
@@ -169,16 +147,45 @@ func Build(o Original, from Addr, to, cc []Addr, body string, now time.Time, loc
 			text += "> " + l + "\n"
 		}
 	}
-	qp := quotedprintable.NewWriter(&h)
-	if _, err := qp.Write([]byte(strings.ReplaceAll(text, "\n", "\r\n"))); err != nil {
+	if err := d.write(orig, refs, text, now, loc); err != nil {
 		return nil, err
 	}
+	return d, nil
+}
+
+// write renders the headers and the quoted-printable body into d.Raw.
+func (d *Draft) write(inReplyTo string, refs []string, text string, now time.Time, loc *time.Location) error {
+	var h bytes.Buffer
+	hdr := func(k, v string) { fmt.Fprintf(&h, "%s: %s\r\n", k, v) }
+	hdr("From", addrHeader(d.From))
+	hdr("To", addrList(d.To))
+	if len(d.Cc) > 0 {
+		hdr("Cc", addrList(d.Cc))
+	}
+	hdr("Subject", mime.QEncoding.Encode("utf-8", d.Subject))
+	hdr("Date", now.In(loc).Format(time.RFC1123Z))
+	hdr("Message-ID", "<"+d.MessageID+">")
+	if inReplyTo != "" {
+		hdr("In-Reply-To", "<"+inReplyTo+">")
+	}
+	if len(refs) > 0 {
+		hdr("References", strings.Join(refs, " "))
+	}
+	hdr("MIME-Version", "1.0")
+	hdr("Content-Type", "text/plain; charset=utf-8")
+	hdr("Content-Transfer-Encoding", "quoted-printable")
+	hdr("User-Agent", "mailpilot")
+	h.WriteString("\r\n")
+	qp := quotedprintable.NewWriter(&h)
+	if _, err := qp.Write([]byte(strings.ReplaceAll(text, "\n", "\r\n"))); err != nil {
+		return err
+	}
 	if err := qp.Close(); err != nil {
-		return nil, err
+		return err
 	}
 	h.WriteString("\r\n")
 	d.Raw = h.Bytes()
-	return d, nil
+	return nil
 }
 
 var frDays = []string{"dim.", "lun.", "mar.", "mer.", "jeu.", "ven.", "sam."}

@@ -154,6 +154,8 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /envoi/preparer", s.auth(s.sendPrepare))
 	mux.HandleFunc("POST /envoi/confirmer", s.auth(s.sendConfirm))
 	mux.HandleFunc("POST /rappel", s.auth(s.todoAction))
+	mux.HandleFunc("GET /ecrire", s.auth(s.composePage))
+	mux.HandleFunc("POST /ecrire", s.auth(s.composeSave))
 	return securityHeaders(mux)
 }
 

@@ -146,7 +146,7 @@ func (s *Store) ViewCounts(ctx context.Context, accountID int64, mailbox string)
 func (s *Store) ChangeVersion(ctx context.Context) (string, error) {
 	var a, b, c, d sql.NullString
 	err := s.db.QueryRowContext(ctx, `SELECT
-		(SELECT max(updated_at) FROM messages), (SELECT max(id) FROM analyses),
+		(SELECT max(updated_at) || '-' || sum(absent) FROM messages), (SELECT max(id) FROM analyses),
 		(SELECT max(updated_at) FROM actions), (SELECT max(id) || '-' || count(*) FROM drafts WHERE status = 'active')`).
 		Scan(&a, &b, &c, &d)
 	if err != nil {

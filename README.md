@@ -205,6 +205,10 @@ Ce que tu peux faire depuis l'interface :
   viennent toujours des en-têtes du mail, jamais du texte de l'IA.
   L'envoi reste coupé tant que `smtp.send_enabled` vaut `false`, et la pause
   ainsi que la limite d'envois par heure s'appliquent.
+- **Nouveau message** et **Transférer** : tu tapes toi-même les
+  destinataires (vérifiés à l'enregistrement, 20 au plus). Le brouillon est
+  rangé dans Brouillons et s'envoie avec la même double validation. Un
+  transfert reprend le texte du mail d'origine, sans ses pièces jointes.
 - **Rappels** : un rappel proposé par l'IA s'ajoute à Todoist ou s'ignore
   depuis la fiche du mail.
 

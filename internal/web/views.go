@@ -145,6 +145,8 @@ type pageVM struct {
 	MoreHref               string
 	Folders                []folderLink
 	Folder                 string // folder page: its name
+	Composer               *composerVM
+	CanCompose             bool
 }
 
 type folderLink struct {
@@ -244,7 +246,7 @@ func (s *Server) viewPage(w http.ResponseWriter, r *http.Request, ws *store.WebS
 	partial := r.Header.Get("X-Partial")
 
 	page := pageVM{View: view, ViewTitle: viewTitles[view], CSRF: ws.CSRF, Account: s.cfg.IMAP.Username,
-		Version: s.version, SendEnabled: s.cfg.SMTP.SendEnabled}
+		Version: s.version, SendEnabled: s.cfg.SMTP.SendEnabled, CanCompose: s.comp != nil}
 	page.Title = page.ViewTitle + " · mailpilot"
 
 	if partial == "" || partial == "list" {
