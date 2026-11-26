@@ -1,0 +1,38 @@
+# mailpilot against GreenMail, with fake Telegram, Todoist and claude
+# (tools/e2e). Test server only: never use insecure_skip_verify for real.
+timezone: Europe/Paris
+log_level: info
+data_dir: @DATA@
+prompts_dir: /nonexistent
+rules_path: /nonexistent/rules.yaml
+profile_path: /nonexistent/profile.md
+imap:
+  host: localhost
+  port: 3993
+  security: tls
+  username: louis@example.test
+  insecure_skip_verify: true
+  drafts_folder: Drafts
+  sent_folder: Sent
+  archive_folder: Archive
+  trash_folder: Trash
+smtp:
+  send_enabled: true
+  from_name: Louis
+  host: localhost
+  port: 3465
+  security: tls
+  insecure_skip_verify: true
+telegram:
+  chat_id: 4242
+  api_base: http://127.0.0.1:8091
+llm:
+  claude_cli:
+    binary: @CLAUDE@
+    timeout: 20s
+todoist:
+  enabled: true
+  api_base: http://127.0.0.1:8092
+web:
+  enabled: true
+  listen: 127.0.0.1:8484

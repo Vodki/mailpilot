@@ -146,3 +146,32 @@ func TestWebComposeRespectsSendGate(t *testing.T) {
 		t.Fatal("sent while disabled")
 	}
 }
+
+func TestWebAskCitesOnlyHits(t *testing.T) {
+	h := newHarness(t)
+	h.start()
+	id1 := h.deliver("html_only.eml", true)
+	if id1 == 0 {
+		t.Fatal("fixture not stored")
+	}
+	ctx := h.ctx
+	h.prov.askAnswers = []string{`{"answer":"Pierre attend ta validation, voir https://evil.example/x.","cited_refs":[1]}`}
+	text, sources, found, err := h.app.WebAsk(ctx, "où en est le devis de Pierre ?")
+	if err != nil || found != 1 || len(sources) != 1 || sources[0] != id1 {
+		t.Fatalf("ask: %q %v %d %v", text, sources, found, err)
+	}
+	if !strings.Contains(text, "Pierre attend ta validation") || strings.Contains(text, "https://evil.example") {
+		t.Fatalf("answer not defanged: %q", text)
+	}
+	// No hits: no LLM call.
+	before := len(h.askCalls())
+	if _, src, found, err := h.app.WebAsk(ctx, "zzqxw introuvable"); err != nil || found != 0 || src != nil || len(h.askCalls()) != before {
+		t.Fatalf("no hits: %v %d %v", src, found, err)
+	}
+	// One question at a time.
+	h.app.asking.Store(true)
+	if _, _, _, err := h.app.WebAsk(ctx, "devis"); !errors.Is(err, ErrWebAskBusy) {
+		t.Fatalf("busy: %v", err)
+	}
+	h.app.asking.Store(false)
+}

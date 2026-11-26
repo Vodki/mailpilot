@@ -78,6 +78,7 @@ type itemVM struct {
 	Pending                     bool // not analysed yet
 	Suspect, Attach, Draft      bool
 	TasksCreated, TasksProposed int
+	Where                       string // search: the folder, when not the inbox
 }
 
 type actionVM struct {
@@ -107,9 +108,10 @@ type paneVM struct {
 	Moves                []folderLink // destinations of "Déplacer"
 	CSRF                 string
 	ListHref             string
-	FromServer           bool // body re-read from the server (purged or unknown)
-	Missing              bool // the server no longer has it at this place
-	ByLoc                bool // actions target Loc (folder page), not the stored id
+	SelfHref             string // this mail in its list
+	FromServer           bool   // body re-read from the server (purged or unknown)
+	Missing              bool   // the server no longer has it at this place
+	ByLoc                bool   // actions target Loc (folder page), not the stored id
 	CanReply             bool
 	Draft                *draftVM
 	From                 addrVM
@@ -146,6 +148,10 @@ type pageVM struct {
 	Folders                []folderLink
 	Folder                 string // folder page: its name
 	Composer               *composerVM
+	Query                  string // the search box
+	Search                 *searchVM
+	Answer                 *answerVM
+	Today                  *todayVM
 	CanCompose             bool
 }
 
@@ -263,16 +269,8 @@ func (s *Server) viewPage(w http.ResponseWriter, r *http.Request, ws *store.WebS
 			page.MoreHref = "/v/" + view + "?avant=" + itoa(items[len(items)-1].ID)
 		}
 		for _, it := range items {
-			vm := itemVM{ID: it.ID, Href: "/v/" + view + "?m=" + itoa(it.ID), FromName: displayName(it.From),
-				Subject: orNoSubject(it.Subject), Time: s.fmtListTime(it.ReceivedAt), Selected: it.ID == selected,
-				Unread: unread != nil && it.UIDValidity == val && unread[it.UID], Attach: it.HasAttachments,
-				Draft: it.HasDraft, TasksCreated: it.TasksCreated, TasksProposed: it.TasksProposed,
-				Suspect: it.AIInstructions || it.Category == "spam_probable"}
-			if it.Analyzed {
-				vm.Prio, vm.PrioLabel, vm.CatLabel, vm.Summary = it.Priority, prioLabels[it.Priority], catLabels[it.Category], it.Summary
-			} else {
-				vm.Pending = it.State == store.StateNew
-			}
+			vm := s.item(it, "/v/"+view+"?m="+itoa(it.ID), val, unread)
+			vm.Selected = it.ID == selected
 			page.Items = append(page.Items, vm)
 		}
 		counts, err := s.st.ViewCounts(ctx, 1, mailbox)
@@ -353,7 +351,7 @@ func (s *Server) pane(r *http.Request, id int64, view string, ws *store.WebSessi
 	}
 	p := &paneVM{ID: m.ID, From: addrVM{Name: m.From.Name, Email: m.From.Email}, To: addrs(m.To), Cc: addrs(m.Cc),
 		Date: s.fmtFullTime(m.ReceivedAt), Subject: orNoSubject(m.Subject), Body: m.TextFull,
-		BodyPurged: m.BodyPurged, HTMLOnly: m.HTMLOnly, BackHref: "/v/" + view, ListHref: "/v/" + view,
+		BodyPurged: m.BodyPurged, HTMLOnly: m.HTMLOnly, BackHref: "/v/" + view, ListHref: "/v/" + view, SelfHref: "/v/" + view + "?m=" + itoa(m.ID),
 		Failed: m.State == store.StateAnalysisFailed,
 		Loc:    Loc{Folder: m.Mailbox, UIDValidity: m.UIDValidity, UID: m.UID}}
 	if p.Body == "" {

@@ -118,3 +118,14 @@ func (c webComposer) CancelComposition(ctx context.Context, id int64) error {
 func (c webComposer) SendComposition(ctx context.Context, id int64, version int) (string, error) {
 	return c.a.WebSendComposition(ctx, id, version)
 }
+
+// webAssistant adapts the app's /ask flow to web.Assistant.
+type webAssistant struct{ a *app.App }
+
+func (w webAssistant) Ask(ctx context.Context, q string) (*web.Answer, error) {
+	text, sources, found, err := w.a.WebAsk(ctx, q)
+	if err != nil {
+		return nil, err
+	}
+	return &web.Answer{Text: text, Sources: sources, Found: found}, nil
+}

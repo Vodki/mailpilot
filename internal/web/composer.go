@@ -190,12 +190,7 @@ func (s *Server) inboxPage(w http.ResponseWriter, r *http.Request, ws *store.Web
 		return page, false
 	}
 	for _, it := range items {
-		vm := itemVM{ID: it.ID, Href: "/v/inbox?m=" + itoa(it.ID), FromName: displayName(it.From), Subject: orNoSubject(it.Subject),
-			Time: s.fmtListTime(it.ReceivedAt), Unread: unread != nil && it.UIDValidity == val && unread[it.UID],
-			Suspect: it.AIInstructions || it.Category == "spam_probable", Draft: it.HasDraft}
-		if it.Analyzed {
-			vm.Prio, vm.PrioLabel, vm.CatLabel, vm.Summary = it.Priority, prioLabels[it.Priority], catLabels[it.Category], it.Summary
-		}
+		vm := s.item(it, "/v/inbox?m="+itoa(it.ID), val, unread)
 		page.Items = append(page.Items, vm)
 	}
 	counts, err := s.st.ViewCounts(ctx, 1, s.cfg.IMAP.Mailbox)

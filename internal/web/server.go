@@ -33,13 +33,14 @@ var staticFS embed.FS
 
 // Deps are the server's collaborators.
 type Deps struct {
-	Config   *config.Config
-	Store    *store.Store
-	Mailbox  Mailbox  // nil: everything shows as read and actions are off
-	Composer Composer // nil: no replies, sends or reminder buttons
-	Log      *slog.Logger
-	Version  string
-	Now      func() time.Time
+	Config    *config.Config
+	Store     *store.Store
+	Mailbox   Mailbox   // nil: everything shows as read and actions are off
+	Composer  Composer  // nil: no replies, sends or reminder buttons
+	Assistant Assistant // nil: no « Demander à ta boîte »
+	Log       *slog.Logger
+	Version   string
+	Now       func() time.Time
 }
 
 // Server is the web interface.
@@ -48,6 +49,7 @@ type Server struct {
 	st      *store.Store
 	mb      Mailbox
 	comp    Composer
+	ask     Assistant
 	log     *slog.Logger
 	version string
 	now     func() time.Time
@@ -78,7 +80,7 @@ func New(d Deps) (*Server, error) {
 	if err != nil {
 		return nil, err
 	}
-	s := &Server{cfg: d.Config, st: d.Store, mb: d.Mailbox, comp: d.Composer, log: d.Log.With("component", "web"),
+	s := &Server{cfg: d.Config, st: d.Store, mb: d.Mailbox, comp: d.Composer, ask: d.Assistant, log: d.Log.With("component", "web"),
 		version: d.Version, now: d.Now, tpl: tpl, limiter: newLimiter()}
 	if u, err := url.Parse(d.Config.Web.PublicURL); err == nil && u.Scheme == "https" {
 		s.secure = true
@@ -156,6 +158,9 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /rappel", s.auth(s.todoAction))
 	mux.HandleFunc("GET /ecrire", s.auth(s.composePage))
 	mux.HandleFunc("POST /ecrire", s.auth(s.composeSave))
+	mux.HandleFunc("GET /recherche", s.auth(s.searchPage))
+	mux.HandleFunc("POST /demander", s.auth(s.askAction))
+	mux.HandleFunc("GET /aujourdhui", s.auth(s.todayPage))
 	return securityHeaders(mux)
 }
 
