@@ -1,0 +1,17 @@
+# Configuration du serveur de test GreenMail (docker-compose.test.yml).
+# Ne jamais utiliser insecure_skip_verify en production.
+data_dir: ./tmp/data
+log_level: debug
+imap:
+  host: localhost
+  port: 3993
+  security: tls
+  username: louis@example.test
+  insecure_skip_verify: true
+smtp:
+  host: localhost
+  port: 3465
+  security: tls
+  insecure_skip_verify: true
+telegram:
+  chat_id: 1
