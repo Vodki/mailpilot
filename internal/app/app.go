@@ -71,6 +71,8 @@ type App struct {
 	ops      MailOps     // IMAP writes (drafts, sent, \Seen); nil disables drafts
 	sendMail SendFunc
 	drafter  atomic.Pointer[analysis.Drafter]
+	asker    atomic.Pointer[analysis.Asker]
+	asking   atomic.Bool
 	drafts   draftState
 	log      *slog.Logger
 	version  string
@@ -117,6 +119,11 @@ func New(d Deps) (*App, error) {
 		return nil, err
 	}
 	a.drafter.Store(dr)
+	as, err := analysis.NewAsker(d.Provider, d.Prompts, d.Config.Location)
+	if err != nil {
+		return nil, err
+	}
+	a.asker.Store(as)
 	for _, s := range d.Config.SelfAliases {
 		a.self[strings.ToLower(strings.TrimSpace(s))] = true
 	}

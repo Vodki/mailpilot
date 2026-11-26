@@ -127,7 +127,7 @@ func (a *App) Text(ctx context.Context, m *telegram.Message) {
 	if a.extText(ctx, m) {
 		return
 	}
-	a.sendText(ctx, "Je ne comprends que les commandes. /help pour la liste.")
+	a.sendText(ctx, "Je ne comprends que les commandes. /ask ta question pour chercher dans tes mails, /help pour la liste.")
 }
 
 // Callback implements telegram.Handler. Tokens are single-use and expire;

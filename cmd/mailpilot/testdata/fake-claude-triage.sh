@@ -1,13 +1,18 @@
 #!/bin/sh
 # Fake `claude` for the run integration test: answers a triage that is
 # urgent when the prompt contains URGENT-TEST, normal otherwise; a fixed
-# body for drafts.
+# body for drafts, a one-source answer for /ask.
 if [ "$1" = "--version" ]; then echo "2.1.332 (Claude Code)"; exit 0; fi
 prompt=$(cat)
 case "$*" in
   *"Tu rédiges des brouillons"*)
     echo '{"type":"system","subtype":"init","tools":["StructuredOutput"],"mcp_servers":[],"model":"claude-opus-5-5"}'
     printf '%s\n' '{"type":"result","subtype":"success","is_error":false,"result":"","structured_output":{"body":"Bonjour,\n\nC est noté.\n\nLouis"},"total_cost_usd":0.001,"usage":{"input_tokens":10,"output_tokens":5}}'
+    exit 0
+    ;;
+  *"Tu réponds aux questions"*)
+    echo '{"type":"system","subtype":"init","tools":["StructuredOutput"],"mcp_servers":[],"model":"claude-opus-5-5"}'
+    printf '%s\n' '{"type":"result","subtype":"success","is_error":false,"result":"","structured_output":{"answer":"Un mail de test.","cited_refs":[1]},"total_cost_usd":0.001,"usage":{"input_tokens":10,"output_tokens":5}}'
     exit 0
     ;;
 esac

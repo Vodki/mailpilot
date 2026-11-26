@@ -55,6 +55,7 @@ func (a *App) digestFooter(ctx context.Context) []string {
 // extCommands adds commands to the menu.
 func (a *App) extCommands() []telegram.BotCommand {
 	return []telegram.BotCommand{
+		{Command: "ask", Description: "Poser une question sur tes mails"},
 		{Command: "mute", Description: "Envoyer un expéditeur au digest seulement"},
 		{Command: "unmute", Description: "Annuler une sourdine"},
 		{Command: "rappels", Description: "Rappels Todoist à confirmer"},
@@ -66,6 +67,8 @@ func (a *App) extCommands() []telegram.BotCommand {
 // extCommand handles feature commands; false if unknown.
 func (a *App) extCommand(ctx context.Context, name, args string, m *telegram.Message) bool {
 	switch name {
+	case "ask", "cherche":
+		a.cmdAsk(ctx, args)
 	case "mute":
 		a.cmdMute(ctx, args, m)
 	case "unmute":
@@ -96,7 +99,9 @@ func (a *App) extStatus(ctx context.Context) []string {
 		}
 	}
 	mutes, _ := a.st.Mutes(ctx, a.now())
+	indexed, _ := a.st.IndexedCount(ctx)
 	return []string{
+		"Recherche : " + itoa(int64(indexed)) + " mail" + plural(indexed) + " indexé" + plural(indexed),
 		"Règles : " + itoa(int64(n)) + " · profil " + a.profileState() + " · sourdines : " + itoa(int64(len(mutes))),
 		"Todoist : " + todo,
 	}
