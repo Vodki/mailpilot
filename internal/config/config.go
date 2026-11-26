@@ -62,6 +62,10 @@ type IMAPConfig struct {
 	// without SPECIAL-USE they must be set, or drafts are refused.
 	DraftsFolder string `yaml:"drafts_folder"`
 	SentFolder   string `yaml:"sent_folder"`
+	// Folders for the web "Archiver" and "Supprimer" buttons, detected the
+	// same way. Deleting only ever moves to the trash.
+	ArchiveFolder string `yaml:"archive_folder"`
+	TrashFolder   string `yaml:"trash_folder"`
 	// SaveSent appends a copy of each sent reply to the sent folder (turn
 	// off if the server already does it).
 	SaveSent bool `yaml:"save_sent"`
@@ -143,6 +147,9 @@ type WebConfig struct {
 	AllowRemote bool          `yaml:"allow_remote"`
 	PublicURL   string        `yaml:"public_url"`
 	SessionTTL  time.Duration `yaml:"session_ttl"`
+	// MarkReadOnOpen sets \Seen when Louis opens a mail in the interface
+	// (never when the list or a notification shows it).
+	MarkReadOnOpen bool `yaml:"mark_read_on_open"`
 
 	// PasswordHash is an argon2id PHC string (mailpilot web-password).
 	PasswordHash Secret `yaml:"-"`
@@ -205,7 +212,7 @@ func Default() Config {
 		},
 		Digest:    DigestConfig{Times: []string{"08:30", "18:00"}},
 		Retention: RetentionCfg{BodyDays: 30},
-		Web:       WebConfig{Listen: "127.0.0.1:8484", SessionTTL: 30 * 24 * time.Hour},
+		Web:       WebConfig{Listen: "127.0.0.1:8484", SessionTTL: 30 * 24 * time.Hour, MarkReadOnOpen: true},
 	}
 }
 

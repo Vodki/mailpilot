@@ -1,7 +1,9 @@
 // Package web serves the mailbox interface: the inbox as a normal webmail,
 // each mail with its AI analysis (priority, summary, actions, warnings).
-// Phase 5 is read-only: browsing changes nothing, neither in the mailbox
-// nor in the database (sessions apart).
+// Browsing (any GET) changes nothing in the mailbox: reads use EXAMINE and
+// BODY.PEEK. Only the buttons Louis presses (POST with the CSRF token) mark
+// read, move, archive or put in the trash, and nothing is ever deleted for
+// good.
 package web
 
 import (
@@ -14,6 +16,7 @@ import (
 	"net"
 	"net/http"
 	"net/url"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -28,17 +31,11 @@ var templatesFS embed.FS
 //go:embed static
 var staticFS embed.FS
 
-// UnseenSource lists the unread UIDs of a mailbox without changing them
-// (mailbox.Ops in production).
-type UnseenSource interface {
-	Unseen(ctx context.Context, mailbox string) (uidValidity uint32, uids []uint32, err error)
-}
-
 // Deps are the server's collaborators.
 type Deps struct {
 	Config  *config.Config
 	Store   *store.Store
-	Unseen  UnseenSource // nil: everything shows as read
+	Mailbox Mailbox // nil: everything shows as read and actions are off
 	Log     *slog.Logger
 	Version string
 	Now     func() time.Time
@@ -48,7 +45,7 @@ type Deps struct {
 type Server struct {
 	cfg     *config.Config
 	st      *store.Store
-	unseen  UnseenSource
+	mb      Mailbox
 	log     *slog.Logger
 	version string
 	now     func() time.Time
@@ -61,6 +58,10 @@ type Server struct {
 	unseenVal uint32
 	unseenSet map[uint32]bool
 	unseenOK  bool
+
+	foldersAt  time.Time
+	folderList []Folder
+	foldersOK  bool
 }
 
 // New builds the server; templates are parsed once here.
@@ -75,7 +76,7 @@ func New(d Deps) (*Server, error) {
 	if err != nil {
 		return nil, err
 	}
-	s := &Server{cfg: d.Config, st: d.Store, unseen: d.Unseen, log: d.Log.With("component", "web"),
+	s := &Server{cfg: d.Config, st: d.Store, mb: d.Mailbox, log: d.Log.With("component", "web"),
 		version: d.Version, now: d.Now, tpl: tpl, limiter: newLimiter()}
 	if u, err := url.Parse(d.Config.Web.PublicURL); err == nil && u.Scheme == "https" {
 		s.secure = true
@@ -145,6 +146,8 @@ func (s *Server) Handler() http.Handler {
 	}))
 	mux.HandleFunc("GET /v/{view}", s.auth(s.viewPage))
 	mux.HandleFunc("GET /events", s.auth(s.events))
+	mux.HandleFunc("GET /dossier", s.auth(s.folderPage))
+	mux.HandleFunc("POST /action", s.auth(s.action))
 	return securityHeaders(mux)
 }
 
@@ -320,36 +323,6 @@ func (s *Server) checkCSRF(r *http.Request, ws *store.WebSession) bool {
 	return len(got) == len(ws.CSRF) && constantEq(got, ws.CSRF)
 }
 
-// ---------- unread state ----------
-
-// unreadSet returns the unread UIDs of the inbox, refreshed at most every
-// 15 s. On error the last known state is kept (and, initially, nothing is
-// shown as unread).
-func (s *Server) unreadSet(ctx context.Context, mailbox string) (uint32, map[uint32]bool) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	if s.unseen == nil {
-		return 0, nil
-	}
-	if s.unseenOK && s.now().Sub(s.unseenAt) < 15*time.Second {
-		return s.unseenVal, s.unseenSet
-	}
-	cctx, cancel := context.WithTimeout(ctx, 5*time.Second)
-	defer cancel()
-	val, uids, err := s.unseen.Unseen(cctx, mailbox)
-	s.unseenAt = s.now()
-	if err != nil {
-		s.log.Warn("unread flags unavailable", "err", err)
-		return s.unseenVal, s.unseenSet
-	}
-	set := make(map[uint32]bool, len(uids))
-	for _, u := range uids {
-		set[u] = true
-	}
-	s.unseenVal, s.unseenSet, s.unseenOK = val, set, true
-	return val, set
-}
-
 // ---------- live updates ----------
 
 // events streams a "change" event whenever the lists would render
@@ -364,6 +337,7 @@ func (s *Server) events(w http.ResponseWriter, r *http.Request, _ *store.WebSess
 	w.Header().Set("X-Accel-Buffering", "no")
 	rc := http.NewResponseController(w)
 	last, _ := s.st.ChangeVersion(r.Context())
+	lastFlags := s.flagsFingerprint(r.Context())
 	_, _ = w.Write([]byte("retry: 3000\n\n"))
 	fl.Flush()
 	tick := time.NewTicker(2 * time.Second)
@@ -375,22 +349,32 @@ func (s *Server) events(w http.ResponseWriter, r *http.Request, _ *store.WebSess
 			return
 		case <-tick.C:
 			_ = rc.SetWriteDeadline(time.Now().Add(10 * time.Second))
+			beat++
+			if beat%30 == 0 {
+				// Every minute: mails read, moved or deleted from another
+				// client (this also hides the ones that left the inbox).
+				if fp := s.flagsFingerprint(r.Context()); fp != lastFlags {
+					lastFlags = fp
+					if _, err := w.Write([]byte("event: change\ndata: 1\n\n")); err != nil {
+						return
+					}
+					fl.Flush()
+				}
+			}
 			v, err := s.st.ChangeVersion(r.Context())
 			if err != nil {
 				continue
 			}
 			if v != last {
 				last = v
-				s.mu.Lock()
-				s.unseenAt = time.Time{} // a new mail is unread: refresh the flags
-				s.mu.Unlock()
+				s.invalidateStatus() // a new mail is unread: refresh the flags
 				if _, err := w.Write([]byte("event: change\ndata: 1\n\n")); err != nil {
 					return
 				}
 				fl.Flush()
 				continue
 			}
-			if beat++; beat%12 == 0 {
+			if beat%12 == 0 {
 				if _, err := w.Write([]byte(": ping\n\n")); err != nil {
 					return
 				}
@@ -398,6 +382,16 @@ func (s *Server) events(w http.ResponseWriter, r *http.Request, _ *store.WebSess
 			}
 		}
 	}
+}
+
+// flagsFingerprint summarises the unread state of the inbox.
+func (s *Server) flagsFingerprint(ctx context.Context) string {
+	val, set := s.inboxStatus(ctx)
+	var sum uint64
+	for u := range set {
+		sum += uint64(u) * 2654435761
+	}
+	return strconv.FormatUint(uint64(val), 10) + ":" + strconv.Itoa(len(set)) + ":" + strconv.FormatUint(sum, 10)
 }
 
 func (s *Server) render(w http.ResponseWriter, name string, data any) {

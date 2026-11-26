@@ -272,7 +272,7 @@ func cmdRun(ctx context.Context, args []string, stderr io.Writer) int {
 	go func() { a.Bot(tg).Run(ctx); done <- struct{}{} }()
 	go func() { _ = w.Run(ctx); done <- struct{}{} }()
 	if cfg.Web.Enabled {
-		ws, err := web.New(web.Deps{Config: cfg, Store: s, Unseen: mailOps, Log: log, Version: version})
+		ws, err := web.New(web.Deps{Config: cfg, Store: s, Mailbox: webMailbox{mailOps}, Log: log, Version: version})
 		if err != nil {
 			log.Error("web", "err", err)
 			return 1

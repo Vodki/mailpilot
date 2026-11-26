@@ -28,15 +28,6 @@ func init() {
 	testHash = h
 }
 
-type fakeUnseen struct {
-	val  uint32
-	uids []uint32
-}
-
-func (f *fakeUnseen) Unseen(context.Context, string) (uint32, []uint32, error) {
-	return f.val, f.uids, nil
-}
-
 type fixture struct {
 	t    *testing.T
 	st   *store.Store
@@ -46,6 +37,7 @@ type fixture struct {
 	ids  map[string]int64
 	jar  string // session cookie value
 	csrf string
+	mb   *fakeMailbox
 }
 
 func newFixture(t *testing.T) *fixture {
@@ -64,8 +56,8 @@ func newFixture(t *testing.T) *fixture {
 	cfg.Location, _ = time.LoadLocation("Europe/Paris")
 	cfg.Web.Enabled = true
 	cfg.Web.PasswordHash = config.NewSecret(testHash)
-	f := &fixture{t: t, st: st, now: time.Date(2026, 11, 26, 9, 0, 0, 0, time.UTC), ids: map[string]int64{}}
-	srv, err := New(Deps{Config: &cfg, Store: st, Unseen: &fakeUnseen{val: 7, uids: []uint32{1}},
+	f := &fixture{t: t, st: st, now: time.Date(2026, 11, 26, 9, 0, 0, 0, time.UTC), ids: map[string]int64{}, mb: newFakeMailbox()}
+	srv, err := New(Deps{Config: &cfg, Store: st, Mailbox: f.mb,
 		Log: slog.New(slog.NewTextHandler(io.Discard, nil)), Version: "test", Now: func() time.Time { return f.now }})
 	if err != nil {
 		t.Fatal(err)
@@ -86,6 +78,9 @@ func (f *fixture) msg(key string, uid uint32, from store.Address, subject, body 
 		f.t.Fatal(err)
 	}
 	f.ids[key] = id
+	if got := f.mb.add("INBOX", &fakeMsg{id: m.MessageID, from: from.Email, subject: subject, body: body, seen: uid != 1}); got != uid {
+		f.t.Fatalf("fake uid %d, want %d", got, uid)
+	}
 	if a != nil {
 		a.MessagePK, a.Attempt, a.Provider, a.Status = id, 1, "test", "ok"
 		if err := f.st.SaveAnalysis(ctx, a); err != nil {

@@ -98,7 +98,7 @@ func (s *Store) ListMessages(ctx context.Context, o ListOptions) ([]ListItem, er
 		(SELECT count(*) FROM actions x WHERE x.message_pk = m.id AND x.status IN ('proposed', 'failed')),
 		EXISTS (SELECT 1 FROM drafts d WHERE d.message_pk = m.id AND d.status = 'active')
 		FROM messages m ` + latestAnalysisJoin + `
-		WHERE m.account_id = ? AND m.mailbox = ? AND (? = 0 OR m.id < ?) AND ` + cond + `
+		WHERE m.account_id = ? AND m.mailbox = ? AND m.absent = 0 AND (? = 0 OR m.id < ?) AND ` + cond + `
 		ORDER BY m.received_at DESC, m.id DESC LIMIT ?`
 	rows, err := s.db.QueryContext(ctx, q, o.AccountID, o.Mailbox, o.BeforeID, o.BeforeID, o.Limit)
 	if err != nil {
@@ -132,7 +132,7 @@ func (s *Store) ViewCounts(ctx context.Context, accountID int64, mailbox string)
 	for _, v := range Views {
 		var n int
 		err := s.db.QueryRowContext(ctx, `SELECT count(*) FROM messages m `+latestAnalysisJoin+`
-			WHERE m.account_id = ? AND m.mailbox = ? AND `+viewCond[v], accountID, mailbox).Scan(&n)
+			WHERE m.account_id = ? AND m.mailbox = ? AND m.absent = 0 AND `+viewCond[v], accountID, mailbox).Scan(&n)
 		if err != nil {
 			return nil, fmt.Errorf("count %s: %w", v, err)
 		}

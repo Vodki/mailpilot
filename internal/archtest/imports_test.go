@@ -64,9 +64,10 @@ func TestLLMHasNoSideEffectImports(t *testing.T) {
 }
 
 // Rule: the web interface reaches the mailbox and the outside world only
-// through what cmd/mailpilot hands it. In phase 5 it is read-only, so it
-// imports nothing that can send, notify or change a mailbox.
-func TestWebIsReadOnly(t *testing.T) {
+// through the narrow interfaces cmd/mailpilot hands it (web.Mailbox: read,
+// mark read, move; nothing deletes for good), so it imports nothing that can
+// send, notify or change a mailbox by itself.
+func TestWebActsOnlyThroughItsInterfaces(t *testing.T) {
 	forbidden := []string{
 		module + "/internal/reply", module + "/internal/mailbox", module + "/internal/telegram",
 		module + "/internal/todoist", module + "/internal/app",

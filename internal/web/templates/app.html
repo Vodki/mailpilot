@@ -11,7 +11,7 @@
 <link rel="stylesheet" href="/static/app.css">
 <script src="/static/app.js" defer></script>
 </head>
-<body class="{{if .Pane}}has-pane{{end}}" data-view="{{.View}}">
+<body class="{{if .Pane}}has-pane{{end}}" data-view="{{.View}}" data-csrf="{{.CSRF}}">
 <header class="top">
   <a class="brand" href="/v/inbox" aria-label="mailpilot, boîte de réception">
     <svg class="logo" aria-hidden="true"><use href="/static/icons.svg#logo"></use></svg><span>mail<b>pilot</b></span>
@@ -28,6 +28,7 @@
   <section class="list" id="list" aria-label="{{.ViewTitle}}">{{template "listcol" .}}</section>
   <main class="pane" id="pane">{{template "pane" .}}</main>
 </div>
+<div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
 </body>
 </html>{{end}}
 
@@ -43,6 +44,14 @@
     <a class="nav-item{{if .Active}} active{{end}} v-{{.Name}}" href="/v/{{.Name}}"><svg aria-hidden="true"><use href="/static/icons.svg#{{.Icon}}"></use></svg><span>{{.Title}}</span>{{if .Count}}<em>{{.Count}}</em>{{end}}</a>
   {{end}}{{end}}
   </div>
+  {{if .Folders}}
+  <div class="nav-label plain"><svg aria-hidden="true"><use href="/static/icons.svg#folder"></use></svg>Dossiers</div>
+  <div class="nav-group">
+  {{range .Folders}}
+    <a class="nav-item{{if .Active}} active{{end}}" href="{{.Href}}"><svg aria-hidden="true"><use href="/static/icons.svg#{{.Icon}}"></use></svg><span>{{.Title}}</span></a>
+  {{end}}
+  </div>
+  {{end}}
   <div class="nav-foot">
     <div>Envoi : {{if .SendEnabled}}<b class="on">activé</b> (double confirmation){{else}}<b>coupé</b>{{end}}</div>
     <div>mailpilot {{.Version}}</div>
@@ -79,8 +88,9 @@
 {{end}}
 
 {{define "pane"}}{{with .Pane}}
-  <article class="mail" data-id="{{.ID}}">
+  <article class="mail" data-id="{{if .ByLoc}}{{.Loc.UID}}{{else}}{{.ID}}{{end}}"{{if .ByLoc}} data-byloc{{end}}>
     <a class="back" href="{{.BackHref}}" data-back>← Retour</a>
+    {{if .ActionsOn}}{{template "toolbar" .}}{{end}}
     <h2 class="mail-subject">{{.Subject}}</h2>
     {{if .Suspect}}<div class="alert"><svg aria-hidden="true"><use href="/static/icons.svg#shield"></use></svg><div><b>Mail suspect.</b> Il contient des instructions adressées à une IA : elles ont été ignorées. Aucune réponse ne sera rédigée automatiquement.</div></div>{{end}}
     <section class="ai{{if .Suspect}} ai-suspect{{end}}" aria-label="Analyse IA">
@@ -98,6 +108,8 @@
         {{if .Reason}}<p class="ai-reason">Pourquoi : {{.Reason}}</p>{{end}}
       {{else if .Failed}}
         <p class="ai-summary muted">L'analyse automatique a échoué pour ce mail.</p>
+      {{else if and .ByLoc (not .ID)}}
+        <p class="ai-summary muted">Ce mail n'est pas passé par mailpilot : seuls les mails arrivés dans la boîte de réception surveillée sont analysés.</p>
       {{else}}
         <p class="ai-summary muted">Pas encore analysé, ou trié par une règle sans passer par l'IA.</p>
       {{end}}
@@ -111,8 +123,9 @@
       <div class="muted small date">{{.Date}}</div>
     </div>
     {{if .Attachments}}<div class="atts">{{range .Attachments}}<span class="att"><svg aria-hidden="true"><use href="/static/icons.svg#clip"></use></svg>{{.}}</span>{{end}}</div>{{end}}
-    {{if .BodyPurged}}<p class="body muted">Le texte de ce mail a été effacé de mailpilot après la durée de conservation. Le résumé reste disponible ci-dessus.</p>
-    {{else}}<div class="body">{{.Body}}</div>{{if .HTMLOnly}}<p class="muted small">Ce mail n'existe qu'en HTML : la version texte ci-dessus en est extraite.</p>{{end}}{{end}}
+    {{if .Missing}}<p class="body muted">Ce mail n'est plus dans ce dossier : il a été déplacé ou supprimé depuis un autre logiciel.</p>
+    {{else if .BodyPurged}}<p class="body muted">Le texte de ce mail a été effacé de mailpilot après la durée de conservation. Le résumé reste disponible ci-dessus.</p>
+    {{else}}<div class="body">{{.Body}}</div>{{if .HTMLOnly}}<p class="muted small">Ce mail n'existe qu'en HTML : la version texte ci-dessus en est extraite.</p>{{end}}{{if and .FromServer .ID (not .ByLoc)}}<p class="muted small">Texte relu sur le serveur : mailpilot l'avait effacé après la durée de conservation.</p>{{end}}{{end}}
     {{if .Thread}}
     <section class="thread"><h3>Dans ce fil</h3>
       <ul>{{range .Thread}}<li{{if .Current}} class="current"{{end}}><a href="{{.Href}}" data-pane><span class="from">{{.FromName}}</span><span class="time">{{.Time}}</span>{{if .Summary}}<span class="summary">{{.Summary}}</span>{{end}}</a></li>{{end}}</ul>
@@ -124,3 +137,15 @@
 {{end}}{{end}}
 
 {{define "list"}}<nav id="nav">{{template "nav" .}}</nav><section id="list">{{template "listcol" .}}</section>{{end}}
+
+
+{{define "actfields"}}<input type="hidden" name="csrf" value="{{.CSRF}}">{{if .ByLoc}}<input type="hidden" name="f" value="{{.Loc.Folder}}"><input type="hidden" name="v" value="{{.Loc.UIDValidity}}"><input type="hidden" name="u" value="{{.Loc.UID}}">{{else}}<input type="hidden" name="id" value="{{.ID}}">{{end}}<input type="hidden" name="back" value="{{.ListHref}}">{{end}}
+
+{{define "toolbar"}}
+    <div class="toolbar" role="toolbar" aria-label="Actions"{{if .MarkOnOpen}} data-mark-on-open{{end}}>
+      {{if not .InArchive}}<form method="post" action="/action">{{template "actfields" .}}<input type="hidden" name="op" value="archiver"><button type="submit" class="tool" data-key="e" title="Archiver (e)" aria-label="Archiver"><svg aria-hidden="true"><use href="/static/icons.svg#archive"></use></svg><span>Archiver</span></button></form>{{end}}
+      {{if not .InTrash}}<form method="post" action="/action">{{template "actfields" .}}<input type="hidden" name="op" value="corbeille"><button type="submit" class="tool" data-key="#" title="Mettre à la corbeille (#)" aria-label="Mettre à la corbeille"><svg aria-hidden="true"><use href="/static/icons.svg#trash"></use></svg><span>Supprimer</span></button></form>{{end}}
+      <form method="post" action="/action">{{template "actfields" .}}<input type="hidden" name="op" value="{{if .Unread}}lu{{else}}nonlu{{end}}"><button type="submit" class="tool" data-key="u" data-seen-toggle title="{{if .Unread}}Marquer comme lu{{else}}Marquer comme non lu{{end}} (u)" aria-label="{{if .Unread}}Marquer comme lu{{else}}Marquer comme non lu{{end}}"><svg aria-hidden="true"><use href="/static/icons.svg#{{if .Unread}}mailopen{{else}}mail{{end}}"></use></svg><span>{{if .Unread}}Marquer lu{{else}}Non lu{{end}}</span></button></form>
+      {{if .Moves}}<form method="post" action="/action" class="move">{{template "actfields" .}}<input type="hidden" name="op" value="deplacer"><svg aria-hidden="true"><use href="/static/icons.svg#move"></use></svg><select name="dest" aria-label="Déplacer vers" data-key="v">{{range .Moves}}<option value="{{.Name}}">{{.Title}}</option>{{end}}</select><button type="submit" class="tool">Déplacer</button></form>{{end}}
+    </div>
+{{end}}
