@@ -25,10 +25,11 @@ type undoVM struct {
 }
 
 type actionResult struct {
-	OK      bool    `json:"ok"`
-	Message string  `json:"message"`
-	Gone    bool    `json:"gone,omitempty"` // the mail left the current list
-	Undo    *undoVM `json:"undo,omitempty"`
+	OK       bool    `json:"ok"`
+	Message  string  `json:"message"`
+	Gone     bool    `json:"gone,omitempty"` // the mail left the current list
+	Undo     *undoVM `json:"undo,omitempty"`
+	Redirect string  `json:"redirect,omitempty"` // page to open next
 }
 
 var actionOps = map[string]bool{"lu": true, "nonlu": true, "archiver": true, "corbeille": true, "deplacer": true}

@@ -154,6 +154,8 @@ func (s *Store) TransitionDraft(ctx context.Context, id int64, from, to, errMsg 
 // SentSince counts drafts sent (or being sent) since t, for the rate limit.
 func (s *Store) SentSince(ctx context.Context, t time.Time) (int, error) {
 	var n int
-	err := s.db.QueryRowContext(ctx, "SELECT COUNT(*) FROM drafts WHERE (status = 'sent' AND sent_at >= ?) OR status = 'sending'", ts(t)).Scan(&n)
+	err := s.db.QueryRowContext(ctx, `SELECT
+		(SELECT COUNT(*) FROM drafts WHERE (status = 'sent' AND sent_at >= ?1) OR status = 'sending') +
+		(SELECT COUNT(*) FROM compositions WHERE (status = 'sent' AND sent_at >= ?1) OR status = 'sending')`, ts(t)).Scan(&n)
 	return n, err
 }

@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/Vodki/mailpilot/internal/mailbox"
+	"github.com/Vodki/mailpilot/internal/reply"
 	"github.com/Vodki/mailpilot/internal/store"
 )
 
@@ -130,4 +132,159 @@ func (a *App) WebTodo(ctx context.Context, actionID int64, add bool) error {
 		return errors.New("rappels Todoist non configurés")
 	}
 	return a.createTask(ctx, actionID, store.ActionProposed, store.ActionFailed)
+}
+
+// WebComposeRequest saves a new message or a forward. Recipients are what
+// Louis typed; they are parsed strictly and never come from a mail.
+type WebComposeRequest struct {
+	ID      int64 // 0: a new composition
+	Forward int64 // forwarded message (new composition only)
+	To, Cc  string
+	Subject string
+	Body    string
+}
+
+// WebCompose stores a version of a new message or forward, and its copy in
+// Drafts (the previous copy is removed).
+func (a *App) WebCompose(ctx context.Context, r WebComposeRequest) (*store.Composition, error) {
+	if a.ops == nil {
+		return nil, errors.New("brouillons non configurés")
+	}
+	to, err := reply.ParseRecipients(r.To)
+	if err != nil {
+		return nil, err
+	}
+	if len(to) == 0 {
+		return nil, errors.New("indique au moins un destinataire")
+	}
+	cc, err := reply.ParseRecipients(r.Cc)
+	if err != nil {
+		return nil, err
+	}
+	if len(to)+len(cc) > reply.MaxRecipients {
+		return nil, fmt.Errorf("trop de destinataires (%d au plus)", reply.MaxRecipients)
+	}
+	c := &store.Composition{ID: r.ID, Kind: store.CompositionNew, To: toStoreAddrs(to), Cc: toStoreAddrs(cc),
+		Subject: strings.TrimSpace(r.Subject), Body: strings.TrimSpace(r.Body)}
+	source := r.Forward
+	if r.ID != 0 {
+		cur, err := a.st.GetComposition(ctx, r.ID)
+		if err != nil {
+			return nil, err
+		}
+		if cur.Status != "active" {
+			return nil, ErrWebNoDraft
+		}
+		source = cur.SourcePK
+	}
+	var built *reply.Draft
+	if source != 0 {
+		m, err := a.st.GetMessage(ctx, source)
+		if err != nil {
+			return nil, err
+		}
+		o := original(m)
+		o.QuoteText = m.TextFull
+		if o.QuoteText == "" {
+			o.QuoteText = m.TextClean
+		}
+		c.Kind, c.SourcePK = store.CompositionForward, source
+		built, err = reply.BuildForward(o, a.fromAddr(), to, cc, c.Subject, c.Body, a.now(), a.cfg.Location)
+		if err != nil {
+			return nil, err
+		}
+	} else {
+		built, err = reply.BuildNew(a.fromAddr(), to, cc, c.Subject, c.Body, a.now(), a.cfg.Location)
+		if err != nil {
+			return nil, err
+		}
+	}
+	c.Subject, c.RFCMessageID, c.Raw = built.Subject, built.MessageID, built.Raw
+	prev, err := a.st.SaveComposition(ctx, c)
+	if err != nil {
+		if errors.Is(err, store.ErrNotFound) {
+			return nil, ErrWebNoDraft
+		}
+		return nil, err
+	}
+	if prev != nil {
+		a.retireComposition(ctx, prev)
+	}
+	if st, err := a.ops.AppendDraft(ctx, c.Raw); err != nil {
+		a.log.Warn("composition append failed", "composition_id", c.ID, "err", err)
+	} else {
+		_ = a.st.SetCompositionIMAP(ctx, c.ID, st.Folder, st.UIDValidity, st.UID)
+		c.IMAPFolder, c.IMAPUIDValidity, c.IMAPUID = st.Folder, st.UIDValidity, st.UID
+	}
+	a.audit(ctx, "web", "compose", fmt.Sprintf("composition=%d kind=%s v=%d rcpts=%d", c.ID, c.Kind, c.Version, len(to)+len(cc)))
+	return c, nil
+}
+
+func (a *App) retireComposition(ctx context.Context, c *store.Composition) {
+	if c.IMAPFolder == "" || a.ops == nil {
+		return
+	}
+	if err := a.ops.Delete(ctx, mailbox.Stored{Folder: c.IMAPFolder, UIDValidity: c.IMAPUIDValidity, UID: c.IMAPUID}, c.RFCMessageID); err != nil {
+		a.log.Warn("composition delete failed", "composition_id", c.ID, "err", err)
+	}
+}
+
+// WebCancelComposition drops a composition and its copy in Drafts.
+func (a *App) WebCancelComposition(ctx context.Context, id int64) error {
+	c, err := a.st.GetComposition(ctx, id)
+	if err != nil {
+		return err
+	}
+	ok, err := a.st.TransitionComposition(ctx, id, "active", "cancelled", "", a.now())
+	if err != nil {
+		return err
+	}
+	if !ok {
+		return ErrWebNoDraft
+	}
+	a.retireComposition(ctx, c)
+	a.audit(ctx, "web", "compose_cancel", fmt.Sprintf("composition=%d", id))
+	return nil
+}
+
+// WebSendComposition sends a composition Louis confirmed twice, if version
+// is still the current one. Same gates as a reply.
+func (a *App) WebSendComposition(ctx context.Context, id int64, version int) (string, error) {
+	if why := a.sendGate(ctx); why != "" {
+		return "", errors.New(why)
+	}
+	c, err := a.st.GetComposition(ctx, id)
+	if err != nil {
+		return "", err
+	}
+	if c.Status != "active" || c.Version != version || len(c.To) == 0 {
+		return "", ErrWebNoDraft
+	}
+	if ok, err := a.st.TransitionComposition(ctx, id, "active", "sending", "", a.now()); err != nil || !ok {
+		return "", ErrWebNoDraft
+	}
+	var rcpts []string
+	for _, l := range [][]store.Address{c.To, c.Cc} {
+		for _, x := range l {
+			rcpts = append(rcpts, x.Email)
+		}
+	}
+	a.audit(ctx, "web", "send_confirmed", fmt.Sprintf("composition=%d rcpts=%d", id, len(rcpts)))
+	if err := a.sendMail(ctx, a.cfg.SMTP, a.fromAddr().Email, rcpts, c.Raw); err != nil {
+		_, _ = a.st.TransitionComposition(ctx, id, "sending", "active", truncateRunes(err.Error(), 500), a.now())
+		a.audit(ctx, "mailpilot", "send_failed", fmt.Sprintf("composition=%d", id))
+		a.log.Warn("smtp send failed", "composition_id", id, "err", err)
+		return "", err
+	}
+	_, _ = a.st.TransitionComposition(ctx, id, "sending", "sent", "", a.now())
+	a.audit(ctx, "mailpilot", "sent", fmt.Sprintf("composition=%d", id))
+	a.log.Info("message sent", "composition_id", id, "kind", c.Kind, "rcpts", len(rcpts))
+	note := ""
+	if a.cfg.IMAP.SaveSent {
+		if _, err := a.ops.AppendSent(ctx, c.Raw); err != nil {
+			note = "Copie dans Envoyés impossible : " + truncateRunes(err.Error(), 150)
+		}
+	}
+	a.retireComposition(ctx, c)
+	return note, nil
 }

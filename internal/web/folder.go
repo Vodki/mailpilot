@@ -35,7 +35,7 @@ func (s *Server) folderPage(w http.ResponseWriter, r *http.Request, ws *store.We
 	title := folderTitle(Folder{Name: name, Role: role})
 
 	page := pageVM{ViewTitle: title, Folder: name, CSRF: ws.CSRF, Account: s.cfg.IMAP.Username,
-		Version: s.version, SendEnabled: s.cfg.SMTP.SendEnabled}
+		Version: s.version, SendEnabled: s.cfg.SMTP.SendEnabled, CanCompose: s.comp != nil}
 	page.Title = title + " · mailpilot"
 
 	if partial == "" || partial == "list" {

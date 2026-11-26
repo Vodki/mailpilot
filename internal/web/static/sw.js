@@ -1,6 +1,6 @@
 // Service worker: caches only the static shell (styles, script, icons).
 // Pages and mail content are never cached: they always come from the server.
-const CACHE = 'mailpilot-static-v3';
+const CACHE = 'mailpilot-static-v4';
 const ASSETS = ['/static/app.css', '/static/app.js', '/static/icons.svg', '/static/icon.svg', '/static/icon-192.png'];
 
 self.addEventListener('install', (e) => {

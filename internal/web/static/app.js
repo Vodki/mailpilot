@@ -220,6 +220,7 @@ async function ajaxForm(form) {
   toast(data.message);
   const dlg = form.closest('dialog');
   if (dlg && data.ok) dlg.close();
+  if (data.ok && data.redirect) { setTimeout(() => { location.href = data.redirect; }, 700); return; }
   if (data.ok) {
     await openPane(location.href, false, false).catch(() => {});
     if (form.closest('.compose')) $('#compose')?.scrollIntoView({ block: 'nearest' });
@@ -229,8 +230,8 @@ async function ajaxForm(form) {
 // prepareSend is the first click on "Envoyer": the server shows exactly
 // what will leave, in a dialog with a single-use confirmation.
 async function prepareSend(form) {
-  const editor = form.closest('.compose')?.querySelector('.editor textarea');
-  if (editor && editor.value !== editor.defaultValue) {
+  const fields = form.closest('.compose')?.querySelectorAll('.editor textarea, .editor input[type=text]') || [];
+  if ([...fields].some((f) => f.value !== f.defaultValue)) {
     toast('Enregistre tes modifications avant d\'envoyer.');
     return;
   }

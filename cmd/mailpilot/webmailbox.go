@@ -102,3 +102,19 @@ func (c webComposer) Send(ctx context.Context, id int64, version int) (string, e
 func (c webComposer) Todo(ctx context.Context, actionID int64, add bool) error {
 	return c.a.WebTodo(ctx, actionID, add)
 }
+
+func (c webComposer) Compose(ctx context.Context, r web.ComposeRequest) (int64, error) {
+	comp, err := c.a.WebCompose(ctx, app.WebComposeRequest{ID: r.ID, Forward: r.Forward, To: r.To, Cc: r.Cc, Subject: r.Subject, Body: r.Body})
+	if err != nil {
+		return 0, err
+	}
+	return comp.ID, nil
+}
+
+func (c webComposer) CancelComposition(ctx context.Context, id int64) error {
+	return c.a.WebCancelComposition(ctx, id)
+}
+
+func (c webComposer) SendComposition(ctx context.Context, id int64, version int) (string, error) {
+	return c.a.WebSendComposition(ctx, id, version)
+}

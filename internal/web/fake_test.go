@@ -5,8 +5,10 @@ import (
 	"encoding/json"
 	"errors"
 	"slices"
+	"strconv"
 	"strings"
 	"sync"
+	"testing"
 	"time"
 
 	"github.com/Vodki/mailpilot/internal/store"
@@ -203,3 +205,45 @@ func (c *fakeComposer) Todo(_ context.Context, id int64, add bool) error {
 }
 
 func jsonUnmarshal(b []byte, v any) error { return json.Unmarshal(b, v) }
+
+func (c *fakeComposer) Compose(ctx context.Context, r ComposeRequest) (int64, error) {
+	if !strings.Contains(r.To, "@") {
+		return 0, errors.New("adresse invalide : " + r.To)
+	}
+	comp := &store.Composition{ID: r.ID, Kind: store.CompositionNew, SourcePK: r.Forward, To: []store.Address{{Email: strings.TrimSpace(r.To)}},
+		Subject: r.Subject, Body: r.Body, Raw: []byte("x"), IMAPFolder: "Drafts"}
+	if r.Forward > 0 {
+		comp.Kind = store.CompositionForward
+	}
+	if _, err := c.f.st.SaveComposition(ctx, comp); err != nil {
+		return 0, err
+	}
+	return comp.ID, nil
+}
+
+func (c *fakeComposer) CancelComposition(ctx context.Context, id int64) error {
+	_, err := c.f.st.TransitionComposition(ctx, id, "active", "cancelled", "", c.f.now)
+	return err
+}
+
+func (c *fakeComposer) SendComposition(ctx context.Context, id int64, version int) (string, error) {
+	if c.gate != "" {
+		return "", errors.New(c.gate)
+	}
+	comp, err := c.f.st.GetComposition(ctx, id)
+	if err != nil || comp.Version != version || comp.Status != "active" {
+		return "", errors.New("message changé")
+	}
+	c.sends = append(c.sends, -id)
+	_, _ = c.f.st.TransitionComposition(ctx, id, "active", "sent", "", c.f.now)
+	return "", nil
+}
+
+func mustInt(t *testing.T, s string) int64 {
+	t.Helper()
+	n, err := strconv.ParseInt(s, 10, 64)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return n
+}

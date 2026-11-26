@@ -21,6 +21,9 @@ type Composer interface {
 	SendGate(ctx context.Context) string
 	Send(ctx context.Context, draftID int64, version int) (note string, err error)
 	Todo(ctx context.Context, actionID int64, add bool) error
+	Compose(ctx context.Context, r ComposeRequest) (id int64, err error)
+	CancelComposition(ctx context.Context, id int64) error
+	SendComposition(ctx context.Context, id int64, version int) (note string, err error)
 }
 
 // DraftRequest asks for a new version of the reply to a stored message.
@@ -51,6 +54,8 @@ type draftVM struct {
 }
 
 type confirmVM struct {
+	Title            string
+	Quoted, Forward  bool // a quoted original / the forwarded mail follows the text
 	Token            string
 	To, Cc, Subject  string
 	Body             string
@@ -165,25 +170,42 @@ func (s *Server) sendPrepare(w http.ResponseWriter, r *http.Request, ws *store.W
 		http.Error(w, why, http.StatusConflict)
 		return
 	}
-	d, err := s.st.GetDraft(ctx, draftID)
-	if err != nil || d.Status != store.DraftActive || d.Version != version {
-		http.Error(w, "Ce brouillon a changé : relis-le avant d'envoyer.", http.StatusConflict)
-		return
-	}
-	m, err := s.st.GetMessage(ctx, d.MessagePK)
-	if err != nil {
-		http.Error(w, "mail introuvable", http.StatusNotFound)
-		return
-	}
-	token, err := s.st.CreateCallback(ctx, cbWebSend, d.MessagePK, d.ID, strconv.Itoa(d.Version), s.now().Add(sendConfirmTTL))
-	if err != nil {
-		s.fail(w, "send token", err)
-		return
-	}
-	vm := confirmVM{Token: token, To: addrText(d.To), Cc: addrText(d.Cc), Subject: d.Subject, Body: d.Body, Version: d.Version}
-	if len(m.ReplyTo) > 0 && !strings.EqualFold(m.ReplyTo[0].Email, m.From.Email) {
-		vm.ReplyToElsewhere = "La réponse part vers l'adresse de réponse indiquée par l'expéditeur (" + m.ReplyTo[0].Email +
-			"), pas vers " + m.From.Email + "."
+	var vm confirmVM
+	if r.PostFormValue("kind") == "c" {
+		c, err := s.st.GetComposition(ctx, draftID)
+		if err != nil || c.Status != "active" || c.Version != version {
+			http.Error(w, "Ce message a changé : relis-le avant d'envoyer.", http.StatusConflict)
+			return
+		}
+		token, err := s.st.CreateCallback(ctx, cbWebSendNew, 0, c.ID, strconv.Itoa(c.Version), s.now().Add(sendConfirmTTL))
+		if err != nil {
+			s.fail(w, "send token", err)
+			return
+		}
+		vm = confirmVM{Token: token, To: addrText(c.To), Cc: addrText(c.Cc), Subject: c.Subject, Body: c.Body, Version: c.Version,
+			Title: "Envoyer ce message ?", Forward: c.Kind == store.CompositionForward}
+	} else {
+		d, err := s.st.GetDraft(ctx, draftID)
+		if err != nil || d.Status != store.DraftActive || d.Version != version {
+			http.Error(w, "Ce brouillon a changé : relis-le avant d'envoyer.", http.StatusConflict)
+			return
+		}
+		m, err := s.st.GetMessage(ctx, d.MessagePK)
+		if err != nil {
+			http.Error(w, "mail introuvable", http.StatusNotFound)
+			return
+		}
+		token, err := s.st.CreateCallback(ctx, cbWebSend, d.MessagePK, d.ID, strconv.Itoa(d.Version), s.now().Add(sendConfirmTTL))
+		if err != nil {
+			s.fail(w, "send token", err)
+			return
+		}
+		vm = confirmVM{Token: token, To: addrText(d.To), Cc: addrText(d.Cc), Subject: d.Subject, Body: d.Body, Version: d.Version,
+			Title: "Envoyer cette réponse ?", Quoted: true}
+		if len(m.ReplyTo) > 0 && !strings.EqualFold(m.ReplyTo[0].Email, m.From.Email) {
+			vm.ReplyToElsewhere = "La réponse part vers l'adresse de réponse indiquée par l'expéditeur (" + m.ReplyTo[0].Email +
+				"), pas vers " + m.From.Email + "."
+		}
 	}
 	s.render(w, "confirm", struct {
 		CSRF string
@@ -205,7 +227,7 @@ func (s *Server) sendConfirm(w http.ResponseWriter, r *http.Request, ws *store.W
 	ctx, cancel := context.WithTimeout(r.Context(), 2*time.Minute)
 	defer cancel()
 	c, err := s.st.ConsumeCallback(ctx, r.PostFormValue("token"), s.now())
-	if err != nil || c.Action != cbWebSend {
+	if err != nil || (c.Action != cbWebSend && c.Action != cbWebSendNew) {
 		msg := "Confirmation invalide : recommence depuis « Envoyer »."
 		if errors.Is(err, store.ErrCallbackExpired) {
 			msg = "Confirmation expirée (10 minutes) : recommence depuis « Envoyer »."
@@ -214,17 +236,21 @@ func (s *Server) sendConfirm(w http.ResponseWriter, r *http.Request, ws *store.W
 		return
 	}
 	version, _ := strconv.Atoi(c.Arg)
-	note, err := s.comp.Send(ctx, c.DraftPK, version)
+	send, done, next := s.comp.Send, "Réponse envoyée", ""
+	if c.Action == cbWebSendNew {
+		send, done, next = s.comp.SendComposition, "Message envoyé", "/v/inbox"
+	}
+	note, err := send(ctx, c.DraftPK, version)
 	if err != nil {
 		s.log.Warn("web send failed", "draft_id", c.DraftPK, "err", err)
 		s.actionReply(w, r, http.StatusConflict, actionResult{Message: "Envoi refusé : " + err.Error() + ". Le brouillon reste dans Brouillons."})
 		return
 	}
-	msg := "Réponse envoyée"
+	msg := done
 	if note != "" {
 		msg += " (" + note + ")"
 	}
-	s.actionReply(w, r, http.StatusOK, actionResult{OK: true, Message: msg})
+	s.actionReply(w, r, http.StatusOK, actionResult{OK: true, Message: msg, Redirect: next})
 }
 
 // todoAction adds a proposed reminder to Todoist, or dismisses it.
