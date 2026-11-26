@@ -45,6 +45,8 @@ document.addEventListener('click', (e) => {
     return;
   }
   const a = e.target.closest('a[data-pane]');
+  // The « Aujourd'hui » page has no list column: its mails open as pages.
+  if (a && a.closest('.today')) return;
   if (!a || e.metaKey || e.ctrlKey || e.shiftKey || e.button !== 0) return;
   e.preventDefault();
   openPane(a.href, true, true).catch(() => { location.href = a.href; });
@@ -57,6 +59,7 @@ window.addEventListener('popstate', () => {
 });
 
 async function refreshList() {
+  if (document.body.classList.contains('wide')) { await openPane(location.href, false, false); return; }
   const before = new Set([...document.querySelectorAll('.item')].map((el) => el.dataset.id));
   const frag = await fetchPartial(location.href, 'list');
   if (!frag) return;
@@ -72,7 +75,7 @@ async function refreshList() {
   if (mail) {
     selectItem(mail.dataset.id);
     // the open mail may just have been analysed
-    if (!('byloc' in mail.dataset) && $('.ai .muted', mail)) openPane(location.href, false).catch(() => {});
+    if (mail.dataset.id && !('byloc' in mail.dataset) && $('.ai .muted', mail)) openPane(location.href, false).catch(() => {});
   }
 }
 
@@ -194,8 +197,44 @@ document.addEventListener('submit', (e) => {
   const form = e.target;
   if (form.closest('.toolbar')) { e.preventDefault(); runAction(form); return; }
   if (form.matches('.send-form')) { e.preventDefault(); prepareSend(form); return; }
+  if (form.matches('[data-ask]')) { e.preventDefault(); ask(form); return; }
   if (form.matches('[data-ajax]')) { e.preventDefault(); ajaxForm(form); }
 });
+
+// ---------- « Demander à ta boîte » ----------
+
+// ask posts the question and shows the answer, with its sources, in the
+// pane. The LLM only reads the mails the search found.
+async function ask(form) {
+  const pane = $('#pane');
+  const q = new FormData(form).get('q') || '';
+  const wait = document.createElement('div');
+  wait.className = 'asking';
+  const p = document.createElement('p');
+  p.textContent = 'L\'IA lit tes mails pour répondre à « ' + q + ' »…';
+  wait.append(document.createElement('i'), p);
+  pane.replaceChildren(wait);
+  document.body.classList.add('has-pane');
+  selectItem(-1);
+  const btn = $('button', form);
+  if (btn) btn.disabled = true;
+  try {
+    const res = await fetch('/demander', {
+      method: 'POST', body: new URLSearchParams(new FormData(form)), credentials: 'same-origin',
+      headers: { 'X-Partial': 'pane' },
+    });
+    if (res.status === 401) { location.href = '/login'; return; }
+    const text = await res.text();
+    if (!res.ok) { toast(text.trim() || ('Erreur ' + res.status)); pane.replaceChildren(); return; }
+    pane.replaceChildren(...new DOMParser().parseFromString('<body>' + text + '</body>', 'text/html').body.childNodes);
+    pane.scrollTop = 0;
+  } catch {
+    toast('Réseau indisponible');
+    pane.replaceChildren();
+  } finally {
+    if (btn) btn.disabled = false;
+  }
+}
 
 // ---------- replies, sending, reminders ----------
 
@@ -255,6 +294,10 @@ document.addEventListener('keydown', (e) => {
     const back = $('.mail a[data-back]');
     if (back) back.click();
     return;
+  }
+  if (e.key === '/') {
+    const box = $('.search input');
+    if (box) { e.preventDefault(); box.focus(); box.select(); return; }
   }
   const btn = $('.mail .toolbar button[data-key="' + CSS.escape(e.key) + '"]');
   if (btn) { e.preventDefault(); runAction(btn.form); }

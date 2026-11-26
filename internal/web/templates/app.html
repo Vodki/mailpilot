@@ -11,11 +11,15 @@
 <link rel="stylesheet" href="/static/app.css">
 <script src="/static/app.js" defer></script>
 </head>
-<body class="{{if or .Pane .Composer}}has-pane{{end}}" data-view="{{.View}}" data-csrf="{{.CSRF}}">
+<body class="{{if or .Pane .Composer .Answer .Today}}has-pane{{end}}{{if .Today}} wide{{end}}" data-view="{{.View}}" data-csrf="{{.CSRF}}">
 <header class="top">
   <a class="brand" href="/v/inbox" aria-label="mailpilot, boîte de réception">
     <svg class="logo" aria-hidden="true"><use href="/static/icons.svg#logo"></use></svg><span>mail<b>pilot</b></span>
   </a>
+  <form class="search" method="get" action="/recherche" role="search">
+    <svg aria-hidden="true"><use href="/static/icons.svg#search"></use></svg>
+    <input type="search" name="q" value="{{.Query}}" placeholder="Rechercher, ou demander à ta boîte…" aria-label="Rechercher dans tes mails" maxlength="500" autocomplete="off">
+  </form>
   <div class="account" title="Compte surveillé">{{.Account}}</div>
   <div class="live" id="live" title="Mise à jour en direct"><i></i><span>En direct</span></div>
   <form method="post" action="/logout" class="logout">
@@ -26,7 +30,7 @@
 <div class="shell">
   <nav class="side" id="nav">{{template "nav" .}}</nav>
   <section class="list" id="list" aria-label="{{.ViewTitle}}">{{template "listcol" .}}</section>
-  <main class="pane" id="pane">{{if .Composer}}{{template "composer" .Composer}}{{else}}{{template "pane" .}}{{end}}</main>
+  <main class="pane" id="pane">{{if .Composer}}{{template "composer" .Composer}}{{else if .Answer}}{{template "answer" .Answer}}{{else if .Today}}{{template "today" .Today}}{{else}}{{template "pane" .}}{{end}}</main>
 </div>
 <div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
 <dialog id="confirm" class="confirm-dialog" aria-label="Confirmer l'envoi"></dialog>
@@ -36,6 +40,7 @@
 {{define "nav"}}
   {{if .CanCompose}}<a class="new-mail" href="/ecrire"><svg aria-hidden="true"><use href="/static/icons.svg#draft"></use></svg><span>Nouveau message</span></a>{{end}}
   <div class="nav-group">
+    <a class="nav-item{{if .Today}} active{{end}} v-today" href="/aujourdhui"><svg aria-hidden="true"><use href="/static/icons.svg#sun"></use></svg><span>Aujourd'hui</span></a>
   {{range .Views}}{{if not .AI}}
     <a class="nav-item{{if .Active}} active{{end}}" href="/v/{{.Name}}"><svg aria-hidden="true"><use href="/static/icons.svg#{{.Icon}}"></use></svg><span>{{.Title}}</span><em>{{.Count}}</em></a>
   {{end}}{{end}}
@@ -61,9 +66,31 @@
 {{end}}
 
 {{define "listcol"}}
+  {{with .Search}}
+  <div class="list-head search-head">
+    <h1>{{if .Q}}Recherche{{else}}Rechercher{{end}}</h1>
+    {{if .Q}}<p class="muted small">{{if .Empty}}Rien à chercher dans « {{.Q}} » : essaie d'autres mots.{{else}}{{.Count}}{{if ge .Count 100}}+{{end}} mail{{if gt .Count 1}}s{{end}} pour « {{.Q}} »{{range .Filters}} · {{.}}{{end}}{{end}}</p>
+    {{else}}<p class="muted small">Des mots, <code>de:pierre</code>, <code>avant:15/11</code>, <code>après:01/11/2026</code>.</p>{{end}}
+    {{if .CanAsk}}
+    <form method="post" action="/demander" class="ask" data-ask>
+      <input type="hidden" name="csrf" value="{{$.CSRF}}"><input type="hidden" name="q" value="{{.Q}}">
+      <button type="submit"><svg aria-hidden="true"><use href="/static/icons.svg#spark"></use></svg><span>Demander à ta boîte</span></button>
+      <span class="muted small">L'IA répond à « {{.Q}} » à partir de tes mails, avec ses sources.</span>
+    </form>
+    {{end}}
+  </div>
+  {{else}}
   <div class="list-head"><h1>{{.ViewTitle}}</h1></div>
+  {{end}}
   <ul class="items">
-  {{range .Items}}
+  {{range .Items}}{{template "item" .}}{{else}}
+    <li class="empty">{{if $.Search}}{{if and $.Search.Q (not $.Search.Empty)}}Aucun mail ne contient tous ces mots.{{if $.Search.CanAsk}} Pour une question, demande plutôt à ta boîte : l'IA cherche plus largement.{{end}}{{end}}{{else}}Aucun mail ici.{{end}}</li>
+  {{end}}
+  </ul>
+  {{if .MoreHref}}<a class="more" href="{{.MoreHref}}">Plus anciens</a>{{end}}
+{{end}}
+
+{{define "item"}}
     <li class="item{{if .Unread}} unread{{end}}{{if .Selected}} selected{{end}}{{if .Suspect}} suspect{{end}}" data-id="{{.ID}}">
       <a href="{{.Href}}" data-pane>
         <span class="prio p-{{if .Suspect}}suspect{{else}}{{.Prio}}{{end}}" title="{{if .Suspect}}Suspect{{else}}{{.PrioLabel}}{{end}}"></span>
@@ -72,6 +99,7 @@
         {{if .Summary}}<span class="summary"><svg aria-hidden="true"><use href="/static/icons.svg#spark"></use></svg>{{.Summary}}</span>
         {{else if .Pending}}<span class="summary muted">Analyse en cours…</span>{{end}}
         <span class="chips">
+          {{if .Where}}<span class="chip where"><svg aria-hidden="true"><use href="/static/icons.svg#folder"></use></svg>{{.Where}}</span>{{end}}
           {{if .Suspect}}<span class="chip bad">Instructions IA ignorées</span>
           {{else if .PrioLabel}}{{if or (eq .Prio "urgent") (eq .Prio "haute")}}<span class="chip p-{{.Prio}}">{{.PrioLabel}}</span>{{end}}{{end}}
           {{if and .CatLabel (not .Suspect)}}<span class="chip">{{.CatLabel}}</span>{{end}}
@@ -82,11 +110,6 @@
         </span>
       </a>
     </li>
-  {{else}}
-    <li class="empty">Aucun mail ici.</li>
-  {{end}}
-  </ul>
-  {{if .MoreHref}}<a class="more" href="{{.MoreHref}}">Plus anciens</a>{{end}}
 {{end}}
 
 {{define "pane"}}{{with .Pane}}
@@ -154,7 +177,7 @@
     </div>
 {{end}}
 
-{{define "idfields"}}<input type="hidden" name="csrf" value="{{.CSRF}}"><input type="hidden" name="id" value="{{.ID}}"><input type="hidden" name="back" value="{{.ListHref}}?m={{.ID}}">{{end}}
+{{define "idfields"}}<input type="hidden" name="csrf" value="{{.CSRF}}"><input type="hidden" name="id" value="{{.ID}}"><input type="hidden" name="back" value="{{.SelfHref}}">{{end}}
 
 {{define "compose"}}
     <section class="compose" id="compose" aria-label="Répondre">
@@ -247,5 +270,49 @@
       <ul>{{range .Drafts}}<li{{if .Current}} class="current"{{end}}><a href="{{.Href}}"><span class="from">{{.Title}}</span><span class="time">{{.When}}</span><span class="summary">À : {{.To}}</span></a></li>{{end}}</ul>
     </section>
     {{end}}
+  </article>
+{{end}}
+
+{{define "answer"}}
+  <article class="mail answer" aria-label="Réponse de ta boîte">
+    <a class="back" href="{{.BackHref}}" data-back>← Retour</a>
+    <p class="muted small ask-label">Ta question</p>
+    <h2 class="mail-subject">« {{.Q}} »</h2>
+    {{if .Error}}<p class="alert small">{{.Error}}</p>
+    {{else if not .Found}}
+      <section class="ai"><div class="ai-head"><svg aria-hidden="true"><use href="/static/icons.svg#spark"></use></svg><span>Demander à ta boîte</span></div>
+      <p class="ai-summary muted">Aucun mail ne correspond à ces mots : l'IA n'a pas été interrogée. Essaie avec un expéditeur, un objet ou un mot du mail.</p></section>
+    {{else}}
+      <section class="ai"><div class="ai-head"><svg aria-hidden="true"><use href="/static/icons.svg#spark"></use></svg><span>Réponse de l'IA</span></div>
+        <p class="ai-summary answer-text">{{.Text}}</p>
+        {{if .Sources}}
+        <h3>Sources</h3>
+        <ul class="sources">{{range .Sources}}<li><a href="{{.Href}}" data-pane><span class="ref">{{.N}}</span><span class="src"><span class="row1"><span class="from">{{.From}}</span><span class="time">{{.Date}}</span></span><span class="subject">{{.Subject}}</span>{{if .Summary}}<span class="summary">{{.Summary}}</span>{{end}}</span></a></li>{{end}}</ul>
+        {{end}}
+        <p class="ai-reason">L'IA n'a lu que {{.Found}} mail{{if gt .Found 1}}s{{end}} trouvé{{if gt .Found 1}}s{{end}} par la recherche{{if .Sources}}, et chaque source citée a été vérifiée parmi eux{{else}} et n'en cite aucun{{end}}. Vérifie dans le mail avant d'agir.</p>
+      </section>
+    {{end}}
+  </article>
+{{end}}
+
+{{define "today"}}
+  <article class="mail today" aria-label="Aujourd'hui">
+    <h2 class="mail-subject">Aujourd'hui<span class="muted">, {{.Date}}</span></h2>
+    <div class="tiles">{{range .Tiles}}<a class="tile {{.Class}}" href="{{.Href}}"><b>{{.Count}}</b><span>{{.Label}}</span></a>{{end}}</div>
+    <section class="day-sec"><h3><svg aria-hidden="true"><use href="/static/icons.svg#flame"></use></svg>Ce qui compte</h3>
+      {{if .Important}}<ul class="items">{{range .Important}}{{template "item" .}}{{end}}</ul>{{else}}<p class="muted">Rien d'urgent dans ta boîte de réception.</p>{{end}}
+    </section>
+    {{if .Waiting}}<section class="day-sec"><h3><svg aria-hidden="true"><use href="/static/icons.svg#reply"></use></svg>Attend ta réponse</h3>
+      <ul class="items">{{range .Waiting}}{{template "item" .}}{{end}}</ul>
+    </section>{{end}}
+    {{if .Reminders}}<section class="day-sec"><h3><svg aria-hidden="true"><use href="/static/icons.svg#check"></use></svg>Rappels</h3>
+      <ul class="actions">{{range .Reminders}}<li><span class="dot {{if .Decide}}wait{{else}}ok{{end}}"></span><span class="a-text">{{.Text}}{{if .Due}} <span class="due{{if not (or .Late .Today)}} later{{end}}">{{.Due}}</span>{{end}}<br><a class="muted small" href="{{.Href}}">{{.From}} · {{.Subj}}</a></span>
+        {{if .Decide}}<span class="a-decide"><form method="post" action="/rappel" data-ajax><input type="hidden" name="csrf" value="{{$.CSRF}}"><input type="hidden" name="action" value="{{.ID}}"><input type="hidden" name="op" value="ajouter"><button type="submit" class="tool small-btn">Ajouter à Todoist</button></form><form method="post" action="/rappel" data-ajax><input type="hidden" name="csrf" value="{{$.CSRF}}"><input type="hidden" name="action" value="{{.ID}}"><input type="hidden" name="op" value="ignorer"><button type="submit" class="ghost small-btn">Ignorer</button></form></span>
+        {{else}}<span class="a-status ok">{{.Status}}</span>{{end}}</li>{{end}}</ul>
+    </section>{{end}}
+    <section class="day-sec"><h3><svg aria-hidden="true"><use href="/static/icons.svg#inbox"></use></svg>Arrivés aujourd'hui</h3>
+      {{if .Arrived}}<ul class="items">{{range .Arrived}}{{template "item" .}}{{end}}</ul>{{else}}<p class="muted">Rien d'autre depuis minuit.</p>{{end}}
+    </section>
+    {{if .NextDigest}}<p class="muted small">Prochain résumé sur Telegram : {{.NextDigest}}.</p>{{end}}
   </article>
 {{end}}

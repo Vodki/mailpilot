@@ -211,6 +211,16 @@ Ce que tu peux faire depuis l'interface :
   transfert reprend le texte du mail d'origine, sans ses pièces jointes.
 - **Rappels** : un rappel proposé par l'IA s'ajoute à Todoist ou s'ignore
   depuis la fiche du mail.
+- **Aujourd'hui** : le résumé du jour sous forme de page. Ce qui compte,
+  ce qui attend ta réponse, les rappels à décider ou dus d'ici demain, et
+  les mails arrivés depuis minuit.
+- **Rechercher** (touche `/`) par mots, par expéditeur (`de:pierre`) et par
+  date (`avant:15/11`, `après:01/11/2026`), dans tous les mails que
+  mailpilot a enregistrés, y compris ceux que tu as archivés.
+- **Demander à ta boîte** : une question en français (« combien je dois
+  payer pour l'électricité ? »). La recherche trouve les mails, l'IA répond
+  à partir d'eux seuls, et chaque source citée est vérifiée parmi eux et
+  cliquable. Une seule question à la fois, Telegram compris.
 
 Les dossiers d'archives et de corbeille sont détectés automatiquement
 (SPECIAL-USE, ou un nom courant comme « Archive » ou « Corbeille »). Sinon,

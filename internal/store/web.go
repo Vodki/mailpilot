@@ -53,6 +53,7 @@ type ListItem struct {
 	HasAttachments bool
 	IsDirect       bool
 	State          string
+	Absent         bool // no longer at this place on the server
 
 	Analyzed       bool
 	Priority       string
@@ -90,33 +91,39 @@ func (s *Store) ListMessages(ctx context.Context, o ListOptions) ([]ListItem, er
 	if o.AccountID == 0 {
 		o.AccountID = 1
 	}
-	q := `SELECT m.id, m.mailbox, m.uidvalidity, m.uid, m.from_addr, m.from_name, m.subject, m.received_at,
-		m.has_attachments, m.is_direct, m.state,
-		a.id IS NOT NULL, COALESCE(a.priority, ''), COALESCE(a.category, ''), COALESCE(a.summary, ''),
-		COALESCE(a.ai_instructions, 0), COALESCE(json_extract(a.result_json, '$.needs_reply'), 0),
-		(SELECT count(*) FROM actions x WHERE x.message_pk = m.id AND x.status = 'created'),
-		(SELECT count(*) FROM actions x WHERE x.message_pk = m.id AND x.status IN ('proposed', 'failed')),
-		EXISTS (SELECT 1 FROM drafts d WHERE d.message_pk = m.id AND d.status = 'active')
-		FROM messages m ` + latestAnalysisJoin + `
+	q := `SELECT ` + listCols + ` FROM messages m ` + latestAnalysisJoin + `
 		WHERE m.account_id = ? AND m.mailbox = ? AND m.absent = 0 AND (? = 0 OR m.id < ?) AND ` + cond + `
 		ORDER BY m.received_at DESC, m.id DESC LIMIT ?`
 	rows, err := s.db.QueryContext(ctx, q, o.AccountID, o.Mailbox, o.BeforeID, o.BeforeID, o.Limit)
 	if err != nil {
 		return nil, fmt.Errorf("list messages: %w", err)
 	}
+	return scanList(rows)
+}
+
+// listCols are the columns scanList reads (messages m, analysis a).
+const listCols = `m.id, m.mailbox, m.uidvalidity, m.uid, m.from_addr, m.from_name, m.subject, m.received_at,
+		m.has_attachments, m.is_direct, m.state, m.absent,
+		a.id IS NOT NULL, COALESCE(a.priority, ''), COALESCE(a.category, ''), COALESCE(a.summary, ''),
+		COALESCE(a.ai_instructions, 0), COALESCE(json_extract(a.result_json, '$.needs_reply'), 0),
+		(SELECT count(*) FROM actions x WHERE x.message_pk = m.id AND x.status = 'created'),
+		(SELECT count(*) FROM actions x WHERE x.message_pk = m.id AND x.status IN ('proposed', 'failed')),
+		EXISTS (SELECT 1 FROM drafts d WHERE d.message_pk = m.id AND d.status = 'active')`
+
+func scanList(rows *sql.Rows) ([]ListItem, error) {
 	defer func() { _ = rows.Close() }()
 	var out []ListItem
 	for rows.Next() {
 		var it ListItem
 		var recv string
-		var att, direct, analyzed, ai, reply, draft int
+		var att, direct, absent, analyzed, ai, reply, draft int
 		if err := rows.Scan(&it.ID, &it.Mailbox, &it.UIDValidity, &it.UID, &it.From.Email, &it.From.Name, &it.Subject, &recv,
-			&att, &direct, &it.State, &analyzed, &it.Priority, &it.Category, &it.Summary, &ai, &reply,
+			&att, &direct, &it.State, &absent, &analyzed, &it.Priority, &it.Category, &it.Summary, &ai, &reply,
 			&it.TasksCreated, &it.TasksProposed, &draft); err != nil {
 			return nil, err
 		}
 		it.ReceivedAt = parseTS(recv)
-		it.HasAttachments, it.IsDirect, it.Analyzed = att == 1, direct == 1, analyzed == 1
+		it.HasAttachments, it.IsDirect, it.Analyzed, it.Absent = att == 1, direct == 1, analyzed == 1, absent == 1
 		it.AIInstructions, it.NeedsReply, it.HasDraft = ai == 1, reply == 1, draft == 1
 		out = append(out, it)
 	}

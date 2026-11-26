@@ -194,6 +194,46 @@ a.tool { text-decoration: none; }
 .forwarded h3 { margin: 0 0 6px; font-size: 12.5px; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); }
 .forwarded .body { padding-top: 8px; font-size: 13.5px; }
 
+/* search, « Demander à ta boîte » */
+.search { flex: 1; min-width: 0; max-width: 560px; display: flex; align-items: center; gap: 8px; margin: 0; background: var(--bg); border: 1px solid var(--line); border-radius: 10px; padding: 0 12px; }
+.search:focus-within { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+.search svg { width: 16px; height: 16px; color: var(--muted); }
+.search input { flex: 1; min-width: 0; font: inherit; color: var(--text); background: transparent; border: 0; padding: 9px 0; outline: none; }
+.search-head p { margin: 4px 0 0; }
+.search-head code { font-size: 12px; background: var(--hover); border-radius: 4px; padding: 0 4px; }
+.ask { display: grid; gap: 6px; margin: 12px 0 2px; padding: 12px; border: 1px solid var(--ai-line); background: var(--ai-soft); border-radius: var(--radius); }
+.ask button { display: inline-flex; align-items: center; justify-content: center; gap: 8px; background: var(--ai); }
+.ask button svg { width: 16px; height: 16px; }
+.chip.where { background: var(--panel); }
+.ask-label { margin: 0 0 4px; }
+.answer-text { white-space: pre-wrap; overflow-wrap: anywhere; line-height: 1.6; }
+.sources { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+.sources a { display: flex; gap: 10px; align-items: flex-start; background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; }
+.sources a:hover { border-color: var(--ai); }
+.sources .ref { flex: none; width: 22px; height: 22px; border-radius: 50%; display: grid; place-items: center; background: var(--ai); color: #fff; font-size: 12px; font-weight: 700; }
+.sources .src { flex: 1; min-width: 0; display: grid; gap: 1px; }
+.asking { height: 100%; display: grid; place-content: center; justify-items: center; gap: 14px; color: var(--ai); font-weight: 600; padding: 24px; text-align: center; }
+.asking i { width: 34px; height: 34px; border-radius: 50%; border: 3px solid var(--ai-line); border-top-color: var(--ai); animation: spin .9s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* « Aujourd'hui » */
+body.wide .shell { grid-template-columns: 232px 1fr; }
+body.wide .list { display: none; }
+.nav-item.v-today svg { color: var(--high); }
+.today { max-width: 920px; }
+.tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; margin: 4px 0 22px; }
+.tile { display: grid; gap: 2px; padding: 14px 16px; border-radius: var(--radius); background: var(--panel); border: 1px solid var(--line); }
+.tile:hover { border-color: var(--accent); }
+.tile b { font-size: 26px; line-height: 1.1; font-variant-numeric: tabular-nums; }
+.tile span { color: var(--muted); font-size: 13px; }
+.tile.urgent b { color: var(--urgent); } .tile.reply b { color: var(--accent); } .tile.todo b { color: var(--wait); }
+.day-sec { margin-bottom: 22px; }
+.day-sec h3 { display: flex; align-items: center; gap: 8px; margin: 0 0 8px; font-size: 13px; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); }
+.day-sec h3 svg { width: 16px; height: 16px; }
+.day-sec .items { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); overflow: hidden; }
+.day-sec .item:last-child { border-bottom: 0; }
+.due.later { color: var(--muted); font-weight: 500; }
+
 /* login */
 .login-page { display: grid; place-items: center; min-height: 100vh; padding: 16px; }
 .login { width: min(360px, 100%); background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: 28px; display: grid; gap: 10px; text-align: center; }
@@ -220,6 +260,11 @@ a.tool { text-decoration: none; }
   .mail { padding: 16px 16px 40px; }
   .back { display: inline-block; }
   .account, .live span { display: none; }
+  .top { gap: 10px; padding: 0 12px; }
+  .brand span { display: none; }
+  .logout button { padding: 6px 4px; font-size: 13px; }
+  body.wide .shell { grid-template-columns: 1fr; }
+  body.wide.has-pane .side { display: flex; }
   .meta { flex-wrap: wrap; }
   .who { overflow-wrap: anywhere; }
   .meta .date { flex-basis: 100%; padding-left: 50px; }

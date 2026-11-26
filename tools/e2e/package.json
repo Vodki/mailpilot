@@ -1,0 +1,8 @@
+{
+  "name": "mailpilot-e2e",
+  "private": true,
+  "description": "End-to-end tests and demo video of the mailpilot web interface (see run.sh).",
+  "dependencies": {
+    "playwright": "1.63.0"
+  }
+}

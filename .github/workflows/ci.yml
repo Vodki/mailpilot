@@ -56,6 +56,42 @@ jobs:
           go build -o bin/mailpilot ./cmd/mailpilot
           MAILPILOT_IMAP_PASSWORD=secret bin/mailpilot check -config deploy/test/config.yaml -only store,imap,smtp
 
+  e2e:
+    runs-on: ubuntu-latest
+    services:
+      greenmail:
+        image: greenmail/standalone:2.1.5
+        env:
+          GREENMAIL_OPTS: >-
+            -Dgreenmail.setup.test.all -Dgreenmail.hostname=0.0.0.0
+            -Dgreenmail.auth.disabled=false
+            -Dgreenmail.users=louis:secret@example.test,pierre:secret@example.test
+            -Dgreenmail.users.login=email
+        ports:
+          - 3025:3025
+          - 3465:3465
+          - 3993:3993
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Playwright
+        run: |
+          npm install --prefix tools/e2e
+          npx --prefix tools/e2e playwright install --with-deps chromium
+      - name: Tests de bout en bout (navigateur contre GreenMail)
+        run: tools/e2e/run.sh
+      - if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-failure
+          path: e2e-failure.png
+          if-no-files-found: ignore
+
   docker:
     runs-on: ubuntu-latest
     steps:

@@ -2,6 +2,7 @@ package app
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 
@@ -35,9 +36,24 @@ func (a *App) cmdAsk(ctx context.Context, args string) {
 }
 
 func (a *App) answer(ctx context.Context, q string) error {
+	r, msgs, err := a.searchAndAsk(ctx, q)
+	if err != nil {
+		return err
+	}
+	if len(msgs) == 0 {
+		a.sendText(ctx, "🔎 Aucun mail indexé ne correspond. Essaie d'autres mots (expéditeur, objet, mot-clé).")
+		return nil
+	}
+	_, err = a.send(ctx, a.formatAnswer(r, msgs), telegram.SendOptions{})
+	return err
+}
+
+// searchAndAsk runs the full-text search, then asks the LLM about the hits
+// only. No hits: no LLM call, (nil, nil, nil).
+func (a *App) searchAndAsk(ctx context.Context, q string) (*analysis.AskResult, []*store.Message, error) {
 	hits, err := a.st.Search(ctx, q, askSearchLimit)
 	if err != nil {
-		return fmt.Errorf("recherche : %w", err)
+		return nil, nil, fmt.Errorf("recherche : %w", err)
 	}
 	var msgs []*store.Message
 	var sources []analysis.AskSource
@@ -51,20 +67,46 @@ func (a *App) answer(ctx context.Context, q string) error {
 	}
 	a.log.Info("ask", "terms", len(store.SearchTerms(q)), "hits", len(msgs))
 	if len(msgs) == 0 {
-		a.sendText(ctx, "🔎 Aucun mail indexé ne correspond. Essaie d'autres mots (expéditeur, objet, mot-clé).")
-		return nil
+		return nil, nil, nil
 	}
 	asker := a.asker.Load()
 	if asker == nil {
-		return fmt.Errorf("assistant non configuré")
+		return nil, nil, fmt.Errorf("assistant non configuré")
 	}
 	r, attempts, err := asker.Ask(ctx, analysis.AskInput{Question: q, Sources: sources, Now: a.now()})
 	a.recordCalls(ctx, "ask", 0, attempts)
 	if err != nil {
-		return err
+		return nil, nil, err
 	}
-	_, err = a.send(ctx, a.formatAnswer(r, msgs), telegram.SendOptions{})
-	return err
+	return r, msgs, nil
+}
+
+// ErrWebAskBusy: one question at a time, Telegram and web together.
+var ErrWebAskBusy = errors.New("une question est déjà en cours, attends sa réponse")
+
+// WebAsk answers a question from the web interface, synchronously. The
+// answer is defanged like on Telegram; sources are the cited messages, in
+// citation order, all among the search hits.
+func (a *App) WebAsk(ctx context.Context, q string) (text string, sources []int64, found int, err error) {
+	q = strings.TrimSpace(q)
+	if q == "" {
+		return "", nil, 0, errors.New("question vide")
+	}
+	if !a.asking.CompareAndSwap(false, true) {
+		return "", nil, 0, ErrWebAskBusy
+	}
+	defer a.asking.Store(false)
+	r, msgs, err := a.searchAndAsk(ctx, q)
+	if err != nil || len(msgs) == 0 {
+		return "", nil, 0, err
+	}
+	for _, n := range r.CitedRefs {
+		if n >= 1 && n <= len(msgs) {
+			sources = append(sources, msgs[n-1].ID)
+		}
+	}
+	a.audit(ctx, "web", "ask", fmt.Sprintf("hits=%d cited=%d", len(msgs), len(sources)))
+	return truncateRunes(Defang(r.Answer), 2000), sources, len(msgs), nil
 }
 
 // formatAnswer renders the answer and the cited mails. Citations point only

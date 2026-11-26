@@ -187,7 +187,7 @@ func (s *Server) actionReply(w http.ResponseWriter, r *http.Request, code int, r
 func safeBack(back string) string {
 	u, err := url.Parse(back)
 	if err != nil || u.Scheme != "" || u.Host != "" || u.User != nil || strings.Contains(back, "\\") ||
-		(!strings.HasPrefix(u.Path, "/v/") && u.Path != "/dossier") {
+		(!strings.HasPrefix(u.Path, "/v/") && u.Path != "/dossier" && u.Path != "/recherche" && u.Path != "/aujourdhui") {
 		return "/v/inbox"
 	}
 	return (&url.URL{Path: u.Path, RawQuery: u.RawQuery}).RequestURI()
