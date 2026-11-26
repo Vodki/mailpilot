@@ -130,6 +130,11 @@ func (a *App) sendDigest(ctx context.Context, digestID int64, title string, forc
 		lines = append(lines, a.digestLine(it))
 		ids = append(ids, it.Message.ID)
 	}
+	for _, l := range a.digestFooter(ctx) {
+		var b telegram.Builder
+		b.Plain("\n" + l)
+		lines = append(lines, b.Text())
+	}
 	if more > 0 {
 		var b telegram.Builder
 		b.Italic(fmt.Sprintf("\n… et %d autre%s au prochain digest.", more, plural(more)))

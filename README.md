@@ -4,10 +4,13 @@ Agent personnel qui surveille une boîte OVH Email Pro en IMAP, résume chaque
 mail avec un LLM (`claude -p`), notifie sur Telegram, crée des rappels Todoist
 et prépare des réponses validées avant tout envoi.
 
-> **État : phase 1.** mailpilot surveille la boîte (IDLE, ou relève toutes
-> les 90 s), analyse chaque nouveau mail, notifie tout de suite ce qui est
-> urgent ou important et regroupe le reste dans les digests de 08:30 et
-> 18:00. Commandes : /status, /digest, /pause, /resume. Le guide complet
+> **État : phase 2.** mailpilot surveille la boîte (IDLE, ou relève toutes
+> les 90 s), applique `rules.yaml`, analyse chaque nouveau mail avec ton
+> profil, notifie tout de suite ce qui est urgent ou important et regroupe
+> le reste dans les digests de 08:30 et 18:00. Les actions datées
+> deviennent des tâches Todoist, les autres sont proposées avec un bouton.
+> Commandes : /status, /digest, /pause, /resume, /mute, /unmute, /rappels,
+> /reload. Le guide complet
 > (BotFather, `chat_id`, Todoist, OVH, VPS) sera livré avec les phases
 > suivantes.
 
@@ -42,8 +45,8 @@ make lint                 # golangci-lint v2
 | --- | --- |
 | `config.yaml` | réglages non secrets ; toute clé inconnue est refusée (`config.example/config.yaml`) |
 | `.env` | secrets (`.env.example`) ; chaque variable accepte aussi `NOM_FILE=/chemin` |
-| `rules.yaml` | règles de pré-filtrage (phase 2) |
-| `profile.md` | ton profil, injecté dans le prompt (phase 2) |
+| `rules.yaml` | règles de pré-filtrage, rechargées par SIGHUP ou /reload |
+| `profile.md` | ton profil, injecté dans le prompt système |
 
 ### Authentification du LLM
 

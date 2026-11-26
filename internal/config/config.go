@@ -29,6 +29,8 @@ type Config struct {
 	DataDir     string         `yaml:"data_dir"`
 	SelfAliases []string       `yaml:"self_aliases"`
 	PromptsDir  string         `yaml:"prompts_dir"`
+	RulesPath   string         `yaml:"rules_path"`
+	ProfilePath string         `yaml:"profile_path"`
 	IMAP        IMAPConfig     `yaml:"imap"`
 	SMTP        SMTPConfig     `yaml:"smtp"`
 	Telegram    TelegramConfig `yaml:"telegram"`
@@ -135,7 +137,9 @@ func Default() Config {
 		LogLevel: "info",
 		DataDir:  "/data",
 		// Files here replace the embedded prompts (missing dir = defaults).
-		PromptsDir: "/config/prompts",
+		PromptsDir:  "/config/prompts",
+		RulesPath:   "/config/rules.yaml",
+		ProfilePath: "/config/profile.md",
 		IMAP: IMAPConfig{
 			Host:          "pro3.mail.ovh.net",
 			Port:          993,

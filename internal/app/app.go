@@ -18,6 +18,7 @@ import (
 	"github.com/Vodki/mailpilot/internal/config"
 	"github.com/Vodki/mailpilot/internal/imapwatch"
 	"github.com/Vodki/mailpilot/internal/llm"
+	"github.com/Vodki/mailpilot/internal/rules"
 	"github.com/Vodki/mailpilot/internal/store"
 	"github.com/Vodki/mailpilot/internal/telegram"
 )
@@ -50,6 +51,7 @@ type Deps struct {
 	Provider llm.Provider
 	Prompts  analysis.Prompts
 	TG       Notifier
+	Todoist  TaskCreator // nil disables reminders
 	Log      *slog.Logger
 	Version  string
 	Now      func() time.Time
@@ -60,8 +62,9 @@ type App struct {
 	cfg      *config.Config
 	st       *store.Store
 	provider llm.Provider
-	analyzer *analysis.Analyzer
+	analyzer atomic.Pointer[analysis.Analyzer]
 	tg       Notifier
+	todo     TaskCreator // nil when Todoist is disabled
 	log      *slog.Logger
 	version  string
 	now      func() time.Time
@@ -75,6 +78,11 @@ type App struct {
 
 	healthMu      sync.Mutex
 	healthAlerted bool
+
+	// Hot-reloadable configuration files.
+	rules       atomic.Pointer[rules.Set]
+	profileText atomic.Pointer[string]
+	prompts     atomic.Pointer[analysis.Prompts]
 }
 
 // New builds the app. Call SetWatcher before Run.
@@ -87,11 +95,13 @@ func New(d Deps) (*App, error) {
 		return nil, err
 	}
 	a := &App{
-		cfg: d.Config, st: d.Store, provider: d.Provider, analyzer: an, tg: d.TG,
+		cfg: d.Config, st: d.Store, provider: d.Provider, tg: d.TG, todo: d.Todoist,
 		log: d.Log, version: d.Version, now: d.Now, started: d.Now(),
 		self:  map[string]bool{strings.ToLower(d.Config.IMAP.Username): true},
 		queue: make(chan int64, 1024),
 	}
+	a.analyzer.Store(an)
+	a.prompts.Store(&d.Prompts)
 	for _, s := range d.Config.SelfAliases {
 		a.self[strings.ToLower(strings.TrimSpace(s))] = true
 	}

@@ -14,6 +14,11 @@ self_aliases: []
 # (triage_system.md, draft_system.md, ask_system.md). Dossier absent : défauts.
 prompts_dir: /config/prompts
 
+# Règles de pré-filtrage et profil, rechargés à chaud (SIGHUP ou /reload).
+# Fichier absent : aucune règle, profil vide.
+rules_path: /config/rules.yaml
+profile_path: /config/profile.md
+
 imap:
   host: pro3.mail.ovh.net
   port: 993

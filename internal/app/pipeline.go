@@ -78,7 +78,7 @@ func (a *App) analyze(ctx context.Context, m *store.Message, eff effects) (state
 		a.log.Error("analysis input", "message_pk", m.ID, "err", err)
 		return store.StateNew, true
 	}
-	out, aerr := a.analyzer.Analyze(ctx, in)
+	out, aerr := a.analyzer.Load().Analyze(ctx, in)
 	a.recordAttempts(ctx, m.ID, n, out)
 
 	switch {

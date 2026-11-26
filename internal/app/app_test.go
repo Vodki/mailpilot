@@ -76,6 +76,8 @@ type harness struct {
 	now  time.Time
 	uid  uint32
 	mu   sync.Mutex
+	todo *fakeTodo
+	dir  string
 }
 
 func (h *harness) set(t time.Time) { h.mu.Lock(); h.now = t; h.mu.Unlock() }
@@ -91,6 +93,12 @@ func newHarness(t *testing.T, mut ...func(*config.Config)) *harness {
 	cfg.IMAP.Username = "louis@example.test"
 	cfg.Telegram.ChatID = chatID
 	cfg.Location, _ = time.LoadLocation("Europe/Paris")
+	dir := t.TempDir()
+	cfg.RulesPath = filepath.Join(dir, "rules.yaml")
+	cfg.ProfilePath = filepath.Join(dir, "profile.md")
+	cfg.PromptsDir = filepath.Join(dir, "prompts")
+	// Keep the background scheduler from sending digests during tests.
+	cfg.Digest.Times = []string{"23:59"}
 	for _, m := range mut {
 		m(&cfg)
 	}
@@ -105,11 +113,15 @@ func newHarness(t *testing.T, mut ...func(*config.Config)) *harness {
 	srv := tgtest.New(t)
 	prompts, _ := analysis.LoadPrompts("")
 	prov := &scriptedProvider{answers: map[string]string{}}
-	h := &harness{t: t, st: st, tg: srv, prov: prov, ctx: ctx, w: &fakeWatcher{}}
+	h := &harness{t: t, st: st, tg: srv, prov: prov, ctx: ctx, w: &fakeWatcher{}, todo: &fakeTodo{}, dir: dir}
+	var todo TaskCreator
+	if cfg.Todoist.Enabled {
+		todo = h.todo
+	}
 	h.set(time.Date(2026, 11, 26, 10, 0, 0, 0, cfg.Location))
 	a, err := New(Deps{
 		Config: &cfg, Store: st, Provider: prov, Prompts: prompts,
-		TG:  telegram.New(srv.URL, config.NewSecret("T"), nil),
+		TG: telegram.New(srv.URL, config.NewSecret("T"), nil), Todoist: todo,
 		Log: slog.New(slog.NewTextHandler(io.Discard, nil)), Version: "test",
 		Now: h.get,
 	})
@@ -242,7 +254,7 @@ func TestNormalMailGoesToDigest(t *testing.T) {
 }
 
 func TestScheduledDigestOncePerSlot(t *testing.T) {
-	h := newHarness(t)
+	h := newHarness(t, func(c *config.Config) { c.Digest.Times = []string{"08:30", "18:00"} })
 	h.set(time.Date(2026, 11, 26, 7, 0, 0, 0, h.app.cfg.Location)) // before any slot
 	h.start()
 	id := h.deliver("newsletter.eml", false)
@@ -346,7 +358,7 @@ func TestStatusAndHealthAlerts(t *testing.T) {
 	h.start()
 	h.command("/status")
 	txt := h.lastText()
-	for _, want := range []string{"mailpilot test", "IMAP : connecté (IDLE)", "Envoi SMTP : désactivé", "Prochain digest : 18:00"} {
+	for _, want := range []string{"mailpilot test", "IMAP : connecté (IDLE)", "Envoi SMTP : désactivé", "Prochain digest : 23:59"} {
 		if !strings.Contains(txt, want) {
 			t.Errorf("status lacks %q:\n%s", want, txt)
 		}

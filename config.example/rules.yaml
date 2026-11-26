@@ -1,4 +1,4 @@
-# Règles de pré-filtrage (phase 2). Évaluées de haut en bas : la première qui
+# Règles de pré-filtrage, rechargées à chaud (SIGHUP ou /reload). Évaluées de haut en bas : la première qui
 # correspond s'applique et arrête l'évaluation, sauf `continue: true`.
 # Une règle suivante ne fait alors que compléter les effets non définis.
 rules:

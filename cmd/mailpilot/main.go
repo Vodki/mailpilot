@@ -25,6 +25,7 @@ import (
 	"github.com/Vodki/mailpilot/internal/logx"
 	"github.com/Vodki/mailpilot/internal/store"
 	"github.com/Vodki/mailpilot/internal/telegram"
+	"github.com/Vodki/mailpilot/internal/todoist"
 )
 
 // version is set at build time with -ldflags "-X main.version=...".
@@ -212,10 +213,18 @@ func cmdRun(ctx context.Context, args []string, stderr io.Writer) int {
 		return 1
 	}
 	tg := telegram.New(cfg.Telegram.APIBase, cfg.Telegram.Token, nil)
-	a, err := app.New(app.Deps{
+	deps := app.Deps{
 		Config: cfg, Store: s, Provider: claudecli.New(cfg.LLM.ClaudeCLI, cfg.LLM.Tasks),
 		Prompts: prompts, TG: tg, Log: log, Version: version,
-	})
+	}
+	if cfg.Todoist.Enabled {
+		if cfg.Todoist.Token.Empty() {
+			log.Error("todoist.enabled is true but MAILPILOT_TODOIST_TOKEN is empty")
+			return 2
+		}
+		deps.Todoist = todoist.New(cfg.Todoist.APIBase, cfg.Todoist.Token, nil)
+	}
+	a, err := app.New(deps)
 	if err != nil {
 		log.Error("init", "err", err)
 		return 1
@@ -230,6 +239,21 @@ func cmdRun(ctx context.Context, args []string, stderr io.Writer) int {
 		log.Warn("telegram setMyCommands", "err", err)
 	}
 	a.Announce(ctx)
+
+	// SIGHUP reloads rules.yaml, profile.md and prompts.
+	hup := make(chan os.Signal, 1)
+	signal.Notify(hup, syscall.SIGHUP)
+	defer signal.Stop(hup)
+	go func() {
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-hup:
+				a.ReloadAndReport(ctx)
+			}
+		}
+	}()
 
 	done := make(chan struct{}, 2)
 	go func() { a.Bot(tg).Run(ctx); done <- struct{}{} }()
