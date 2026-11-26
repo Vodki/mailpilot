@@ -694,3 +694,16 @@ func (s *Store) PurgeCallbacks(ctx context.Context, before time.Time) (int64, er
 	}
 	return res.RowsAffected()
 }
+
+// MessageByNotification finds the message behind a Telegram notification.
+func (s *Store) MessageByNotification(ctx context.Context, tgMessageID int64) (*Message, error) {
+	var pk int64
+	err := s.db.QueryRowContext(ctx, "SELECT message_pk FROM notifications WHERE tg_message_id = ? AND tg_message_id != 0 LIMIT 1", tgMessageID).Scan(&pk)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, ErrNotFound
+	}
+	if err != nil {
+		return nil, err
+	}
+	return s.GetMessage(ctx, pk)
+}

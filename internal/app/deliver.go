@@ -82,7 +82,7 @@ func (a *App) deliver(ctx context.Context, m *store.Message, t *analysis.Triage,
 		return
 	}
 	if ok {
-		text := a.formatImmediate(m, t, eff)
+		text := a.formatImmediate(m, t, eff, a.notifyLines(ctx, m))
 		sent, err := a.send(ctx, text, telegram.SendOptions{Markup: a.messageKeyboard(ctx, m, t)})
 		if err != nil {
 			_ = a.st.ReleaseNotification(ctx, m.ID, kindImmediate)
@@ -132,7 +132,7 @@ func headerAddr(x store.Address) string {
 	return Defang(x.Name) + " <" + x.Email + ">"
 }
 
-func (a *App) formatImmediate(m *store.Message, t *analysis.Triage, eff effects) telegram.Text {
+func (a *App) formatImmediate(m *store.Message, t *analysis.Triage, eff effects, extra []string) telegram.Text {
 	var b telegram.Builder
 	switch {
 	case m.State == store.StateAnalysisFailed:
@@ -184,6 +184,12 @@ func (a *App) formatImmediate(m *store.Message, t *analysis.Triage, eff effects)
 		}
 	} else if m.State == store.StateAnalysisFailed {
 		b.Plain("\nL'analyse automatique a échoué. Ouvre le mail dans ta messagerie.\n")
+	}
+	if len(extra) > 0 {
+		b.Plain("\n")
+		for _, l := range extra {
+			b.Plain(l + "\n")
+		}
 	}
 	if len(eff.Rules) > 0 {
 		b.Italic("Règle : " + strings.Join(eff.Rules, ", ")).Plain("\n")

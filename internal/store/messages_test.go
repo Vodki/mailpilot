@@ -219,3 +219,44 @@ func TestMailboxState(t *testing.T) {
 		t.Fatalf("state %+v", st)
 	}
 }
+
+func TestActionsAndMutes(t *testing.T) {
+	ctx := context.Background()
+	s := migrated(t)
+	id, _, _ := s.InsertMessage(ctx, msg("a@x", 1), nil, "")
+	a := &Action{MessagePK: id, Idx: 0, Text: "Faire", Status: ActionProposed}
+	aid, ins, err := s.InsertAction(ctx, a)
+	if err != nil || !ins {
+		t.Fatal(err)
+	}
+	if again, ins2, _ := s.InsertAction(ctx, &Action{MessagePK: id, Idx: 0, Text: "autre", Status: ActionProposed}); ins2 || again != aid {
+		t.Fatal("action must be deduplicated on (message, idx)")
+	}
+	ok, _ := s.ClaimAction(ctx, aid, ActionProposed)
+	twice, _ := s.ClaimAction(ctx, aid, ActionProposed)
+	if !ok || twice {
+		t.Fatal("claim must be exclusive")
+	}
+	_ = s.SetActionStatus(ctx, aid, ActionCreated, "T1", "")
+	got, _ := s.GetAction(ctx, aid)
+	if got.Status != ActionCreated || got.TodoistID != "T1" {
+		t.Fatalf("%+v", got)
+	}
+	if open, _ := s.OpenActions(ctx, time.Now().Add(-time.Hour), 10); len(open) != 0 {
+		t.Fatal("created action is not open")
+	}
+
+	_ = s.AddMute(ctx, "Spam.example", time.Time{})
+	_ = s.AddMute(ctx, "old@x.test", time.Now().Add(-time.Hour))
+	mutes, _ := s.Mutes(ctx, time.Now())
+	if len(mutes) != 1 || mutes[0].Pattern != "spam.example" {
+		t.Fatalf("mutes %+v", mutes)
+	}
+	if removed, _ := s.RemoveMute(ctx, "spam.example"); !removed {
+		t.Fatal("remove")
+	}
+	_ = s.RecordRuleHits(ctx, id, []string{"r1", "r1"})
+	if hits, _ := s.RuleHitCounts(ctx, time.Time{}); hits["r1"] != 1 {
+		t.Fatalf("hits %v", hits)
+	}
+}
