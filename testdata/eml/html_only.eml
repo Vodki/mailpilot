@@ -1,0 +1,13 @@
+From: "Pierre Martin" <pierre@client.example>
+To: louis@example.test
+Subject: =?UTF-8?Q?Validation_du_devis_=C3=A9t=C3=A9?=
+Date: Mon, 23 Nov 2026 09:15:00 +0100
+Message-ID: <html1@client.example>
+MIME-Version: 1.0
+Content-Type: text/html; charset=UTF-8
+Content-Transfer-Encoding: quoted-printable
+
+<html><head><style>p{}</style><script>alert(1)</script></head><body><p>Bonj=
+our Louis,</p><p>Peux-tu valider le <a href=3D"https://evil.example/x">devi=
+s</a> avant <b>vendredi</b> ?</p><img src=3D"cid:logo"><p>Merci</p></body><=
+/html>

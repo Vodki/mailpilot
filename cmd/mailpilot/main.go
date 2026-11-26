@@ -16,10 +16,15 @@ import (
 	"syscall"
 	_ "time/tzdata" // Europe/Paris must resolve in a distroless image
 
+	"github.com/Vodki/mailpilot/internal/analysis"
+	"github.com/Vodki/mailpilot/internal/app"
 	"github.com/Vodki/mailpilot/internal/check"
 	"github.com/Vodki/mailpilot/internal/config"
+	"github.com/Vodki/mailpilot/internal/imapwatch"
+	"github.com/Vodki/mailpilot/internal/llm/claudecli"
 	"github.com/Vodki/mailpilot/internal/logx"
 	"github.com/Vodki/mailpilot/internal/store"
+	"github.com/Vodki/mailpilot/internal/telegram"
 )
 
 // version is set at build time with -ldflags "-X main.version=...".
@@ -187,6 +192,10 @@ func cmdRun(ctx context.Context, args []string, stderr io.Writer) int {
 	}
 	log := logx.New(stderr, cfg.LogLevel)
 	slog.SetDefault(log)
+	if cfg.Telegram.Token.Empty() || cfg.Telegram.ChatID == 0 {
+		log.Error("telegram.chat_id and MAILPILOT_TELEGRAM_TOKEN are required to run")
+		return 2
+	}
 
 	s, n, err := openStore(ctx, cfg)
 	if err != nil {
@@ -197,10 +206,38 @@ func cmdRun(ctx context.Context, args []string, stderr io.Writer) int {
 	log.Info("starting", "version", version, "schema", store.LatestVersion(), "migrations_applied", n,
 		"imap", cfg.IMAP.Address(), "send_enabled", cfg.SMTP.SendEnabled)
 
-	// Phase 0: the mail pipeline is not wired yet. The process stays up so
-	// the container, volumes and shutdown path can be exercised.
-	log.Warn("pipeline not implemented yet (phase 1)")
+	prompts, err := analysis.LoadPrompts(cfg.PromptsDir)
+	if err != nil {
+		log.Error("prompts", "err", err)
+		return 1
+	}
+	tg := telegram.New(cfg.Telegram.APIBase, cfg.Telegram.Token, nil)
+	a, err := app.New(app.Deps{
+		Config: cfg, Store: s, Provider: claudecli.New(cfg.LLM.ClaudeCLI, cfg.LLM.Tasks),
+		Prompts: prompts, TG: tg, Log: log, Version: version,
+	})
+	if err != nil {
+		log.Error("init", "err", err)
+		return 1
+	}
+	w := imapwatch.New(cfg.IMAP, a.Sink(), log)
+	a.SetWatcher(w)
+	if err := a.Start(ctx); err != nil {
+		log.Error("start", "err", err)
+		return 1
+	}
+	if err := tg.SetMyCommands(ctx, a.Commands()); err != nil {
+		log.Warn("telegram setMyCommands", "err", err)
+	}
+	a.Announce(ctx)
+
+	done := make(chan struct{}, 2)
+	go func() { a.Bot(tg).Run(ctx); done <- struct{}{} }()
+	go func() { _ = w.Run(ctx); done <- struct{}{} }()
 	<-ctx.Done()
+	<-done
+	<-done
+	a.Wait()
 	if err := context.Cause(ctx); err != nil && !errors.Is(err, context.Canceled) {
 		log.Error("shutdown", "err", err)
 	}

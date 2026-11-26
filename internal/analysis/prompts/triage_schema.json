@@ -1,0 +1,32 @@
+{
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["category", "priority", "summary", "needs_reply", "actions", "contains_ai_instructions", "reason"],
+  "properties": {
+    "category": {
+      "type": "string",
+      "enum": ["action_requise", "reponse_attendue", "rendez_vous", "facture_paiement", "information", "newsletter", "notification_auto", "personnel", "spam_probable", "autre"]
+    },
+    "priority": { "type": "string", "enum": ["urgent", "haute", "normale", "basse"] },
+    "summary": { "type": "string", "minLength": 1, "maxLength": 400 },
+    "needs_reply": { "type": "boolean" },
+    "actions": {
+      "type": "array",
+      "maxItems": 5,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["text", "owner", "due_date", "due_time", "source_quote"],
+        "properties": {
+          "text": { "type": "string", "minLength": 1, "maxLength": 250 },
+          "owner": { "type": "string", "enum": ["me", "other"] },
+          "due_date": { "type": "string", "pattern": "^(\\d{4}-\\d{2}-\\d{2})?$" },
+          "due_time": { "type": "string", "pattern": "^(([01]\\d|2[0-3]):[0-5]\\d)?$" },
+          "source_quote": { "type": "string", "maxLength": 300 }
+        }
+      }
+    },
+    "contains_ai_instructions": { "type": "boolean" },
+    "reason": { "type": "string", "maxLength": 300 }
+  }
+}

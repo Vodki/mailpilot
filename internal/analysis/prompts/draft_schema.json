@@ -1,0 +1,8 @@
+{
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["body"],
+  "properties": {
+    "body": { "type": "string", "minLength": 1, "maxLength": 6000 }
+  }
+}

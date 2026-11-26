@@ -10,6 +10,10 @@ data_dir: /data          # base SQLite et état
 # directement et à m'exclure des destinataires d'une réponse.
 self_aliases: []
 
+# Les fichiers de ce dossier remplacent les prompts intégrés du même nom
+# (triage_system.md, draft_system.md, ask_system.md). Dossier absent : défauts.
+prompts_dir: /config/prompts
+
 imap:
   host: pro3.mail.ovh.net
   port: 993
