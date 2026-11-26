@@ -26,6 +26,7 @@ type scriptedProvider struct {
 	mu           sync.Mutex
 	answers      map[string]string // marker -> JSON
 	draftAnswers map[string]string
+	askAnswers   []string // consumed in order; the last one repeats
 	calls        []llm.Request
 }
 
@@ -35,6 +36,16 @@ func (p *scriptedProvider) Complete(_ context.Context, r llm.Request) (*llm.Resp
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	p.calls = append(p.calls, r)
+	if r.Task == "ask" {
+		out := `{"answer":"Je ne trouve rien.","cited_refs":[]}`
+		if len(p.askAnswers) > 0 {
+			out = p.askAnswers[0]
+			if len(p.askAnswers) > 1 {
+				p.askAnswers = p.askAnswers[1:]
+			}
+		}
+		return &llm.Response{Output: json.RawMessage(out), Model: "m", CostUSD: 0.01}, nil
+	}
 	if r.Task == "draft" {
 		body := `{"body":"Bonjour,\n\nC'est noté.\n\nLouis"}`
 		for marker, out := range p.draftAnswers {

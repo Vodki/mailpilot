@@ -45,7 +45,12 @@ func (a *App) Reload(_ context.Context) error {
 	if err != nil {
 		return fmt.Errorf("prompts : %w", err)
 	}
+	as, err := analysis.NewAsker(a.provider, prompts, a.cfg.Location)
+	if err != nil {
+		return fmt.Errorf("prompts : %w", err)
+	}
 	p := string(profile)
+	a.asker.Store(as)
 	a.drafter.Store(dr)
 	a.rules.Store(rs)
 	a.profileText.Store(&p)

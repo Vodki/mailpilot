@@ -92,6 +92,8 @@ func TestRunEndToEnd(t *testing.T) {
 
 	tg.Push(tgtest.PrivateMessage(4242, 4242, "/status"))
 	tgtest.WaitFor(t, 30*time.Second, has("IMAP : connecté (IDLE)"))
+	tg.Push(tgtest.PrivateMessage(4242, 4242, "/ask "+subject))
+	tgtest.WaitFor(t, 30*time.Second, has("[1] "))
 	tg.Push(tgtest.PrivateMessage(999, 999, "/pause"))
 	time.Sleep(3 * time.Second)
 	if has("⏸")() {
