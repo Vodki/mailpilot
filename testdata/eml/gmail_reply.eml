@@ -1,0 +1,25 @@
+From: Julie <julie@gmail.example>
+To: louis@example.test
+Subject: Re: Planning janvier
+Date: Wed, 25 Nov 2026 10:00:00 +0100
+Message-ID: <CAgmail123@mail.gmail.com>
+In-Reply-To: <orig-planning@example.test>
+References: <root-planning@example.test> <orig-planning@example.test>
+MIME-Version: 1.0
+Content-Type: multipart/alternative; boundary="b1"
+
+--b1
+Content-Type: text/plain; charset="UTF-8"
+
+OK pour moi, je prends la semaine du 12.
+
+Le mar. 24 nov. 2026 à 18:02, Louis <louis@example.test> a
+écrit :
+
+> Qui prend la semaine du 12 ?
+> Merci
+--b1
+Content-Type: text/html; charset="UTF-8"
+
+<div dir="ltr">OK pour moi, je prends la semaine du 12.</div><br><div class="gmail_quote"><div class="gmail_attr">Le mar. 24 nov. 2026 à 18:02, Louis a écrit :<br></div><blockquote class="gmail_quote">Qui prend la semaine du 12 ?<br>Merci</blockquote></div>
+--b1--

@@ -1,0 +1,9 @@
+{
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["answer", "cited_refs"],
+  "properties": {
+    "answer": { "type": "string", "minLength": 1, "maxLength": 2000 },
+    "cited_refs": { "type": "array", "maxItems": 10, "items": { "type": "integer", "minimum": 1 } }
+  }
+}

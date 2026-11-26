@@ -1,0 +1,46 @@
+From: Sophie =?ISO-8859-1?Q?L=E9ger?= <sophie@fournisseur.example>
+To: Louis <louis@example.test>
+Cc: compta@example.test
+Subject: =?ISO-8859-1?Q?Facture_n=B042?=
+Date: Tue, 24 Nov 2026 14:00:00 +0100
+Message-ID: <fact42@fournisseur.example>
+MIME-Version: 1.0
+Content-Type: multipart/mixed; boundary="MIX"
+
+--MIX
+Content-Type: multipart/alternative; boundary="ALT"
+
+--ALT
+Content-Type: text/plain; charset=ISO-8859-1
+Content-Transfer-Encoding: quoted-printable
+
+Bonjour,
+
+Voici la facture n=B0 42 d'un montant de 1 250,00 EUR... =E9ch=E9ance le 15=
+/12.
+=C0 bient=F4t,
+Sophie
+--ALT
+Content-Type: text/html; charset=ISO-8859-1
+Content-Transfer-Encoding: quoted-printable
+
+<p>Bonjour,<br><br>Voici la facture n=B0 42 d'un montant de 1 250,00 EUR...=
+ =E9ch=E9ance le 15/12.<br>=C0 bient=F4t,<br>Sophie</p>
+--ALT--
+--MIX
+Content-Type: application/pdf; name="facture-42.pdf"
+Content-Disposition: attachment; filename="facture-42.pdf"
+Content-Transfer-Encoding: base64
+
+JVBERi0xLjQgZmFrZSBwZGYgY29udGVudCAlUERGLTEuNCBmYWtlIHBkZiBjb250ZW50ICVQREYt
+MS40IGZha2UgcGRmIGNvbnRlbnQgJVBERi0xLjQgZmFrZSBwZGYgY29udGVudCAlUERGLTEuNCBm
+YWtlIHBkZiBjb250ZW50ICVQREYtMS40IGZha2UgcGRmIGNvbnRlbnQgJVBERi0xLjQgZmFrZSBw
+ZGYgY29udGVudCAlUERGLTEuNCBmYWtlIHBkZiBjb250ZW50ICVQREYtMS40IGZha2UgcGRmIGNv
+bnRlbnQgJVBERi0xLjQgZmFrZSBwZGYgY29udGVudCAlUERGLTEuNCBmYWtlIHBkZiBjb250ZW50
+ICVQREYtMS40IGZha2UgcGRmIGNvbnRlbnQgJVBERi0xLjQgZmFrZSBwZGYgY29udGVudCAlUERG
+LTEuNCBmYWtlIHBkZiBjb250ZW50ICVQREYtMS40IGZha2UgcGRmIGNvbnRlbnQgJVBERi0xLjQg
+ZmFrZSBwZGYgY29udGVudCAlUERGLTEuNCBmYWtlIHBkZiBjb250ZW50ICVQREYtMS40IGZha2Ug
+cGRmIGNvbnRlbnQgJVBERi0xLjQgZmFrZSBwZGYgY29udGVudCAlUERGLTEuNCBmYWtlIHBkZiBj
+b250ZW50IA==
+
+--MIX--

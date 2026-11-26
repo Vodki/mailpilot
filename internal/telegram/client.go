@@ -1,5 +1,6 @@
-// Package telegram is a minimal Bot API client. Phase 0 only verifies the
-// token; long polling, commands and callbacks arrive in phase 1.
+// Package telegram is a minimal Bot API client and the bot loop. Messages are
+// sent without parse_mode (formatting uses entities) and with link previews
+// disabled, so mail content is always rendered as plain text.
 package telegram
 
 import (
@@ -43,6 +44,9 @@ type apiResponse struct {
 	Result      json.RawMessage `json:"result"`
 	ErrorCode   int             `json:"error_code"`
 	Description string          `json:"description"`
+	Parameters  struct {
+		RetryAfter int `json:"retry_after"`
+	} `json:"parameters"`
 }
 
 // APIError is a Bot API error response.
@@ -50,6 +54,7 @@ type APIError struct {
 	Method      string
 	Code        int
 	Description string
+	RetryAfter  int
 }
 
 func (e *APIError) Error() string {
@@ -101,7 +106,7 @@ func (c *Client) call(ctx context.Context, method string, params any, out any) e
 		return fmt.Errorf("telegram %s: HTTP %d, invalid JSON", method, resp.StatusCode)
 	}
 	if !ar.OK {
-		return &APIError{Method: method, Code: ar.ErrorCode, Description: ar.Description}
+		return &APIError{Method: method, Code: ar.ErrorCode, Description: ar.Description, RetryAfter: ar.Parameters.RetryAfter}
 	}
 	if out != nil {
 		if err := json.Unmarshal(ar.Result, out); err != nil {

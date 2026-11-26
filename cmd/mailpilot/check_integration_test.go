@@ -76,7 +76,9 @@ func waitForPort(t *testing.T, addr string) {
 }
 
 // deliver drops an unread message into the test mailbox via SMTPS.
-func deliver(t *testing.T, cfg *config.Config) {
+func deliver(t *testing.T, cfg *config.Config) { deliverSubject(t, cfg, "Test phase 0") }
+
+func deliverSubject(t *testing.T, cfg *config.Config, subject string) {
 	t.Helper()
 	c, err := smtp.DialTLS(cfg.SMTP.Address(), &tls.Config{InsecureSkipVerify: true}) //nolint:gosec // test server
 	if err != nil {
@@ -86,7 +88,7 @@ func deliver(t *testing.T, cfg *config.Config) {
 	if err := c.Auth(sasl.NewPlainClient("", "louis@example.test", "secret")); err != nil {
 		t.Fatal(err)
 	}
-	msg := "From: pierre@example.test\r\nTo: louis@example.test\r\nSubject: Test phase 0\r\n" +
+	msg := "From: pierre@example.test\r\nTo: louis@example.test\r\nSubject: " + subject + "\r\n" +
 		"Message-ID: <phase0-" + time.Now().Format("150405.000") + "@example.test>\r\n\r\nBonjour\r\n"
 	if err := c.SendMail("pierre@example.test", []string{"louis@example.test"}, strings.NewReader(msg)); err != nil {
 		t.Fatal(err)

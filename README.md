@@ -4,10 +4,12 @@ Agent personnel qui surveille une boîte OVH Email Pro en IMAP, résume chaque
 mail avec un LLM (`claude -p`), notifie sur Telegram, crée des rappels Todoist
 et prépare des réponses validées avant tout envoi.
 
-> **État : phase 0 (socle).** La configuration, la base, `mailpilot check`,
-> l'image Docker et la CI sont en place. La surveillance de la boîte arrive en
-> phase 1. Le guide complet (BotFather, `chat_id`, Todoist, OVH, VPS) sera
-> livré avec les phases suivantes.
+> **État : phase 1.** mailpilot surveille la boîte (IDLE, ou relève toutes
+> les 90 s), analyse chaque nouveau mail, notifie tout de suite ce qui est
+> urgent ou important et regroupe le reste dans les digests de 08:30 et
+> 18:00. Commandes : /status, /digest, /pause, /resume. Le guide complet
+> (BotFather, `chat_id`, Todoist, OVH, VPS) sera livré avec les phases
+> suivantes.
 
 ## Principes
 
