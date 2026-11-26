@@ -80,7 +80,7 @@ type State struct {
 
 var (
 	mu      sync.Mutex
-	st      = State{Steps: 9}
+	st            = State{Steps: 9}
 	nextID  int64 = 100
 	updates []map[string]any
 	notify  = make(chan struct{}, 1)
