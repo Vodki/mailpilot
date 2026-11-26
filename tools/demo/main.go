@@ -13,7 +13,6 @@ import (
 	"io"
 	"log"
 	"net/http"
-	"net/smtp"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -77,6 +76,8 @@ type State struct {
 	Thinking bool       `json:"thinking"`
 	Done     bool       `json:"done"`
 }
+
+var demoCfg *config.Config
 
 var (
 	mu      sync.Mutex
@@ -379,9 +380,24 @@ func deliver(fromName, from, subject, body string, extra ...string) {
 	}
 	hdr = append(hdr, extra...)
 	msg := strings.Join(hdr, "\r\n") + "\r\n\r\n" + strings.ReplaceAll(body, "\n", "\r\n") + "\r\n"
-	auth := smtp.PlainAuth("", "pierre@example.test", "secret", "localhost")
-	if err := smtp.SendMail("localhost:3025", auth, from, []string{"louis@example.test"}, []byte(msg)); err != nil {
-		log.Fatalf("smtp: %v", err)
+	// IMAP APPEND into the inbox: only internal/reply may speak SMTP.
+	c, err := mailbox.Dial(context.Background(), demoCfg.IMAP, nil)
+	if err != nil {
+		log.Fatalf("imap: %v", err)
+	}
+	defer func() { _ = c.Close() }()
+	if err := c.Login(demoCfg.IMAP.Username, "secret").Wait(); err != nil {
+		log.Fatalf("imap login: %v", err)
+	}
+	cmd := c.Append("INBOX", int64(len(msg)), nil)
+	if _, err := cmd.Write([]byte(msg)); err != nil {
+		log.Fatalf("imap append: %v", err)
+	}
+	if err := cmd.Close(); err != nil {
+		log.Fatalf("imap append: %v", err)
+	}
+	if _, err := cmd.Wait(); err != nil {
+		log.Fatalf("imap append: %v", err)
 	}
 	edit(func(s *State) {
 		s.Mails = append(s.Mails, Mail{Box: "louis", From: fromName, Subject: subject, Time: now()})
@@ -526,6 +542,7 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
+	demoCfg = cfg
 	ensureFolders(cfg)
 
 	go func() { log.Fatal(http.ListenAndServe("127.0.0.1:8081", http.HandlerFunc(telegramHandler))) }()
