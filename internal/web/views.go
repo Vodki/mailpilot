@@ -81,8 +81,10 @@ type itemVM struct {
 }
 
 type actionVM struct {
+	ID                             int64
 	Text, Due, Status, StatusClass string
 	Unverified                     bool
+	Decide                         bool // proposed or failed: Louis can add or dismiss it
 }
 
 type addrVM struct{ Name, Email string }
@@ -108,6 +110,8 @@ type paneVM struct {
 	FromServer           bool // body re-read from the server (purged or unknown)
 	Missing              bool // the server no longer has it at this place
 	ByLoc                bool // actions target Loc (folder page), not the stored id
+	CanReply             bool
+	Draft                *draftVM
 	From                 addrVM
 	To, Cc               []addrVM
 	Date                 string
@@ -372,6 +376,9 @@ func (s *Server) pane(r *http.Request, id int64, view string, ws *store.WebSessi
 		return nil, err
 	}
 	s.fillActions(r, p, ws)
+	if err := s.fillDraft(ctx, p); err != nil {
+		return nil, err
+	}
 	if m.ThreadID != 0 {
 		thread, err := s.st.ThreadMessages(ctx, m.ThreadID, 20)
 		if err != nil {
@@ -411,7 +418,8 @@ func (s *Server) fillAI(ctx context.Context, p *paneVM, id int64) error {
 	}
 	for _, x := range acts {
 		st := actionStatus[x.Status]
-		vm := actionVM{Text: x.Text, Status: st[0], StatusClass: st[1], Unverified: !x.QuoteVerified}
+		vm := actionVM{ID: x.ID, Text: x.Text, Status: st[0], StatusClass: st[1], Unverified: !x.QuoteVerified,
+			Decide: s.comp != nil && (x.Status == store.ActionProposed || x.Status == store.ActionFailed)}
 		if x.DueDate != "" {
 			if d, err := time.Parse("2006-01-02", x.DueDate); err == nil {
 				vm.Due = strconv.Itoa(d.Day()) + " " + frMonthsShort[d.Month()]

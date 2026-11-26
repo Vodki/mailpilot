@@ -33,12 +33,13 @@ var staticFS embed.FS
 
 // Deps are the server's collaborators.
 type Deps struct {
-	Config  *config.Config
-	Store   *store.Store
-	Mailbox Mailbox // nil: everything shows as read and actions are off
-	Log     *slog.Logger
-	Version string
-	Now     func() time.Time
+	Config   *config.Config
+	Store    *store.Store
+	Mailbox  Mailbox  // nil: everything shows as read and actions are off
+	Composer Composer // nil: no replies, sends or reminder buttons
+	Log      *slog.Logger
+	Version  string
+	Now      func() time.Time
 }
 
 // Server is the web interface.
@@ -46,6 +47,7 @@ type Server struct {
 	cfg     *config.Config
 	st      *store.Store
 	mb      Mailbox
+	comp    Composer
 	log     *slog.Logger
 	version string
 	now     func() time.Time
@@ -76,7 +78,7 @@ func New(d Deps) (*Server, error) {
 	if err != nil {
 		return nil, err
 	}
-	s := &Server{cfg: d.Config, st: d.Store, mb: d.Mailbox, log: d.Log.With("component", "web"),
+	s := &Server{cfg: d.Config, st: d.Store, mb: d.Mailbox, comp: d.Composer, log: d.Log.With("component", "web"),
 		version: d.Version, now: d.Now, tpl: tpl, limiter: newLimiter()}
 	if u, err := url.Parse(d.Config.Web.PublicURL); err == nil && u.Scheme == "https" {
 		s.secure = true
@@ -148,6 +150,10 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /events", s.auth(s.events))
 	mux.HandleFunc("GET /dossier", s.auth(s.folderPage))
 	mux.HandleFunc("POST /action", s.auth(s.action))
+	mux.HandleFunc("POST /brouillon", s.auth(s.draftAction))
+	mux.HandleFunc("POST /envoi/preparer", s.auth(s.sendPrepare))
+	mux.HandleFunc("POST /envoi/confirmer", s.auth(s.sendConfirm))
+	mux.HandleFunc("POST /rappel", s.auth(s.todoAction))
 	return securityHeaders(mux)
 }
 

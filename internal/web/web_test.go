@@ -38,6 +38,7 @@ type fixture struct {
 	jar  string // session cookie value
 	csrf string
 	mb   *fakeMailbox
+	comp *fakeComposer
 }
 
 func newFixture(t *testing.T) *fixture {
@@ -57,7 +58,8 @@ func newFixture(t *testing.T) *fixture {
 	cfg.Web.Enabled = true
 	cfg.Web.PasswordHash = config.NewSecret(testHash)
 	f := &fixture{t: t, st: st, now: time.Date(2026, 11, 26, 9, 0, 0, 0, time.UTC), ids: map[string]int64{}, mb: newFakeMailbox()}
-	srv, err := New(Deps{Config: &cfg, Store: st, Mailbox: f.mb,
+	f.comp = &fakeComposer{f: f}
+	srv, err := New(Deps{Config: &cfg, Store: st, Mailbox: f.mb, Composer: f.comp,
 		Log: slog.New(slog.NewTextHandler(io.Discard, nil)), Version: "test", Now: func() time.Time { return f.now }})
 	if err != nil {
 		t.Fatal(err)
