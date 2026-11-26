@@ -1,0 +1,16 @@
+{
+  "name": "mailpilot",
+  "short_name": "mailpilot",
+  "description": "Ta boîte mail, triée et résumée par l'IA.",
+  "lang": "fr",
+  "start_url": "/v/inbox",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#f6f8fb",
+  "theme_color": "#1f6feb",
+  "icons": [
+    {"src": "/static/icon-192.png", "sizes": "192x192", "type": "image/png"},
+    {"src": "/static/icon-512.png", "sizes": "512x512", "type": "image/png"},
+    {"src": "/static/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable"}
+  ]
+}

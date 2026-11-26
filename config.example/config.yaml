@@ -72,3 +72,12 @@ digest:
 
 retention:
   body_days: 30
+
+# Interface web (boîte mail augmentée). Coupée par défaut. Le mot de passe
+# vient de MAILPILOT_WEB_PASSWORD_HASH (mailpilot web-password).
+web:
+  enabled: false
+  listen: 127.0.0.1:8484   # loopback seulement ; Tailscale ou tunnel SSH pour y accéder
+  allow_remote: false      # true pour écouter ailleurs que sur le loopback (Docker, proxy HTTPS)
+  public_url: ""           # https://… si servi derrière un proxy HTTPS (cookies Secure)
+  session_ttl: 720h        # durée d'une session (30 jours)

@@ -2,7 +2,9 @@
 
 Agent personnel qui surveille une boîte OVH Email Pro en IMAP, résume chaque
 mail avec un LLM (`claude -p`), notifie sur Telegram, crée des rappels Todoist
-et prépare des réponses validées avant tout envoi.
+et prépare des réponses validées avant tout envoi. Une interface web
+(facultative) affiche la boîte comme un webmail, chaque mail avec son
+analyse.
 
 ## Ce que fait mailpilot
 
@@ -24,6 +26,12 @@ et prépare des réponses validées avant tout envoi.
   indexés (plein texte) et répond en citant ses sources.
 - **Garde-fous** : `mailpilot check`, alerte Telegram si IMAP décroche,
   corps des mails effacés après 30 jours (résumés conservés).
+
+- **Interface web** (facultative, `web.enabled`) : la boîte de réception
+  comme dans un webmail, avec pour chaque mail sa priorité, son résumé, ses
+  rappels Todoist et les alertes ; des vues IA (Urgent, À traiter, Réponse
+  attendue, Factures, Newsletters, Suspects) ; mise à jour en direct ;
+  installable sur téléphone (PWA). Lecture seule pour l'instant.
 
 ### Commandes Telegram
 
@@ -48,8 +56,10 @@ et prépare des réponses validées avant tout envoi.
 - Aucun envoi sans double validation sur Telegram ; `send_enabled: false`
   par défaut. Seul le package `internal/reply` peut parler SMTP (test
   d'architecture).
-- Aucun port entrant, aucun contenu de mail dans les logs, secrets
-  uniquement dans l'environnement ou des fichiers montés.
+- Aucun port entrant tant que l'interface web est coupée ; activée, elle
+  n'écoute que sur 127.0.0.1 sauf `web.allow_remote: true`. Aucun contenu
+  de mail dans les logs, secrets uniquement dans l'environnement ou des
+  fichiers montés.
 - La boîte est lue sans jamais changer l'état lu ou non lu.
 
 ## Démarrage rapide (serveur de test)
@@ -148,12 +158,40 @@ Les deux se rechargent sans redémarrer : `/reload` sur Telegram ou
 `docker compose -f deploy/docker-compose.yml kill -s HUP mailpilot`. Une erreur garde l'ancienne version
 et te la signale.
 
+### 7. L'interface web (facultatif)
+
+1. Choisis un mot de passe (12 caractères minimum) et calcule son hash :
+   `mailpilot web-password` (ou, avec Docker,
+   `docker compose -f deploy/docker-compose.yml run --rm -T mailpilot web-password`),
+   tape le mot de passe puis Entrée. Copie la ligne `$argon2id$…` dans
+   `MAILPILOT_WEB_PASSWORD_HASH`, entre apostrophes dans `.env` (sinon
+   Docker Compose interprète les `$`). Le mot de passe lui-même n'est
+   stocké nulle part.
+2. Dans `config.yaml` : `web.enabled: true`. Par défaut l'interface écoute
+   sur `127.0.0.1:8484`, donc seulement depuis la machine elle-même.
+3. Pour y accéder depuis ton ordinateur ou ton téléphone sans rien exposer
+   sur Internet : Tailscale (le plus simple sur téléphone), ou un tunnel SSH
+   `ssh -L 8484:127.0.0.1:8484 ton-vps` puis http://localhost:8484.
+4. Sur téléphone, « Ajouter à l'écran d'accueil » installe l'application
+   (PWA). Les pages et les mails ne sont jamais mis en cache sur l'appareil.
+
+Avec Docker, le conteneur doit écouter sur toutes ses interfaces et le port
+n'être publié que sur le loopback de l'hôte : `web.listen: 0.0.0.0:8484`,
+`web.allow_remote: true`, et dans `deploy/docker-compose.yml` la ligne
+`ports: ["127.0.0.1:8484:8484"]` (déjà en commentaire).
+
+Hébergement public plus tard : derrière un reverse proxy HTTPS, avec
+`web.allow_remote: true` et `web.public_url: https://…` (cookies `Secure`).
+L'interface a déjà la connexion par mot de passe (argon2id), des cookies
+`HttpOnly` et `SameSite=Strict`, une protection CSRF, une politique CSP
+stricte et une limite de 5 essais de mot de passe par quart d'heure.
+
 ## Déploiement sur un VPS
 
 Prérequis : un petit VPS (1 vCPU, 1 Go de RAM suffisent) avec Docker et le
 plugin compose. Aucun port entrant n'est nécessaire : IMAP, SMTP, Telegram
-(long polling) et le LLM sont des connexions sortantes. Tu peux fermer tout
-sauf SSH.
+(long polling) et le LLM sont des connexions sortantes, et l'interface web
+reste sur le loopback. Tu peux fermer tout sauf SSH.
 
 ```sh
 git clone https://github.com/Vodki/mailpilot.git && cd mailpilot

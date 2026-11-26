@@ -3,6 +3,7 @@
 package main
 
 import (
+	"bufio"
 	"context"
 	"errors"
 	"flag"
@@ -27,6 +28,7 @@ import (
 	"github.com/Vodki/mailpilot/internal/store"
 	"github.com/Vodki/mailpilot/internal/telegram"
 	"github.com/Vodki/mailpilot/internal/todoist"
+	"github.com/Vodki/mailpilot/internal/web"
 )
 
 // version is set at build time with -ldflags "-X main.version=...".
@@ -38,6 +40,7 @@ Commandes :
   run       démarre le service
   check     teste IMAP, SMTP, Telegram, le LLM et Todoist sans rien modifier
   migrate   applique les migrations de la base
+  web-password  calcule le hash du mot de passe de l'interface web (lu sur l'entrée standard)
   version   affiche la version
 
 Options communes :
@@ -67,6 +70,8 @@ func run(args []string, stdout, stderr io.Writer) int {
 		return cmdMigrate(ctx, rest, stdout, stderr)
 	case "run":
 		return cmdRun(ctx, rest, stderr)
+	case "web-password":
+		return cmdWebPassword(os.Stdin, stdout, stderr)
 	case "help", "-h", "--help":
 		_, _ = fmt.Fprint(stdout, usage)
 		return 0
@@ -205,6 +210,10 @@ func cmdRun(ctx context.Context, args []string, stderr io.Writer) int {
 		return 1
 	}
 	defer func() { _ = s.Close() }()
+	if err := s.EnsureAccount(ctx, 1, cfg.IMAP.Username); err != nil {
+		log.Error("store account", "err", err)
+		return 1
+	}
 	log.Info("starting", "version", version, "schema", store.LatestVersion(), "migrations_applied", n,
 		"imap", cfg.IMAP.Address(), "send_enabled", cfg.SMTP.SendEnabled)
 
@@ -214,10 +223,11 @@ func cmdRun(ctx context.Context, args []string, stderr io.Writer) int {
 		return 1
 	}
 	tg := telegram.New(cfg.Telegram.APIBase, cfg.Telegram.Token, nil)
+	mailOps := mailbox.NewOps(cfg.IMAP)
 	deps := app.Deps{
 		Config: cfg, Store: s, Provider: claudecli.New(cfg.LLM.ClaudeCLI, cfg.LLM.Tasks),
 		Prompts: prompts, TG: tg, Log: log, Version: version,
-		Ops: mailbox.NewOps(cfg.IMAP),
+		Ops: mailOps,
 	}
 	if cfg.Todoist.Enabled {
 		if cfg.Todoist.Token.Empty() {
@@ -257,16 +267,51 @@ func cmdRun(ctx context.Context, args []string, stderr io.Writer) int {
 		}
 	}()
 
-	done := make(chan struct{}, 2)
+	done := make(chan struct{}, 3)
+	workers := 2
 	go func() { a.Bot(tg).Run(ctx); done <- struct{}{} }()
 	go func() { _ = w.Run(ctx); done <- struct{}{} }()
+	if cfg.Web.Enabled {
+		ws, err := web.New(web.Deps{Config: cfg, Store: s, Unseen: mailOps, Log: log, Version: version})
+		if err != nil {
+			log.Error("web", "err", err)
+			return 1
+		}
+		workers++
+		go func() {
+			if err := ws.Run(ctx); err != nil {
+				log.Error("web interface stopped", "err", err)
+			}
+			done <- struct{}{}
+		}()
+	}
 	<-ctx.Done()
-	<-done
-	<-done
+	for range workers {
+		<-done
+	}
 	a.Wait()
 	if err := context.Cause(ctx); err != nil && !errors.Is(err, context.Canceled) {
 		log.Error("shutdown", "err", err)
 	}
 	log.Info("stopped")
+	return 0
+}
+
+// cmdWebPassword reads a password on stdin and prints its argon2id hash,
+// to put in MAILPILOT_WEB_PASSWORD_HASH.
+func cmdWebPassword(stdin io.Reader, stdout, stderr io.Writer) int {
+	_, _ = fmt.Fprint(stderr, "Mot de passe de l'interface web (12 caractères minimum) : ")
+	line, err := bufio.NewReader(stdin).ReadString('\n')
+	if err != nil && line == "" {
+		_, _ = fmt.Fprintln(stderr, "\naucun mot de passe lu")
+		return 2
+	}
+	hash, err := web.HashPassword(strings.TrimRight(line, "\r\n"))
+	if err != nil {
+		_, _ = fmt.Fprintln(stderr, "\n"+err.Error())
+		return 2
+	}
+	_, _ = fmt.Fprintln(stderr)
+	_, _ = fmt.Fprintln(stdout, hash)
 	return 0
 }

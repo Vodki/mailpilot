@@ -1,0 +1,23 @@
+{{define "login.html"}}<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#1f6feb">
+<title>Connexion · mailpilot</title>
+<link rel="manifest" href="/manifest.webmanifest">
+<link rel="icon" href="/static/icon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="/static/app.css">
+</head>
+<body class="login-page">
+<form class="login" method="post" action="/login">
+  <svg class="logo big" aria-hidden="true"><use href="/static/icons.svg#logo"></use></svg>
+  <h1>mail<b>pilot</b></h1>
+  <p class="muted">Ta boîte mail, triée et résumée par l'IA.</p>
+  {{if .Error}}<p class="error" role="alert">Mot de passe incorrect.</p>{{end}}
+  <label for="password">Mot de passe</label>
+  <input id="password" name="password" type="password" autocomplete="current-password" required autofocus>
+  <button type="submit">Se connecter</button>
+</form>
+</body>
+</html>{{end}}

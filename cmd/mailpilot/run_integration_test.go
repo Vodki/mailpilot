@@ -5,6 +5,11 @@ package main
 import (
 	"bytes"
 	"context"
+	"io"
+	"net"
+	"net/http"
+	"net/http/cookiejar"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -14,6 +19,7 @@ import (
 
 	"github.com/Vodki/mailpilot/internal/config"
 	"github.com/Vodki/mailpilot/internal/telegram/tgtest"
+	"github.com/Vodki/mailpilot/internal/web"
 )
 
 type syncBuffer struct {
@@ -209,5 +215,81 @@ func TestDraftAndSendEndToEnd(t *testing.T) {
 	}
 	if n := countSubject(t, cfg.IMAP, "Drafts", "RE: "+subject); n != 0 {
 		t.Fatalf("draft not removed (%d)", n)
+	}
+}
+
+// TestWebEndToEnd runs the service with the web interface against
+// GreenMail: a new mail shows up in the list with its AI summary, and
+// browsing it changes no \Seen flag.
+func TestWebEndToEnd(t *testing.T) {
+	path := testConfig(t)
+	tg := tgtest.New(t)
+	fake, _ := filepath.Abs("testdata/fake-claude-triage.sh")
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	addr := ln.Addr().String()
+	_ = ln.Close()
+	extra := "\ntelegram:\n  chat_id: 4242\n  api_base: " + tg.URL +
+		"\nllm:\n  claude_cli:\n    binary: " + fake + "\n    timeout: 10s\n" +
+		"web:\n  enabled: true\n  listen: " + addr + "\n"
+	f, _ := os.OpenFile(path, os.O_APPEND|os.O_WRONLY, 0o600)
+	_, _ = f.WriteString(extra)
+	_ = f.Close()
+	hash, err := web.HashPassword("mot-de-passe-de-test")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv(config.EnvTelegramToken, "TEST")
+	t.Setenv(config.EnvWebPassword, hash)
+	cfg, err := config.Load(path, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	logs := &syncBuffer{}
+	done := make(chan int, 1)
+	go func() { done <- cmdRun(ctx, []string{"-config", path}, logs) }()
+	defer func() { cancel(); <-done }()
+	tgtest.WaitFor(t, 30*time.Second, func() bool { return strings.Contains(logs.String(), "web interface listening") })
+	tgtest.WaitFor(t, 30*time.Second, func() bool { return strings.Contains(logs.String(), "bootstrap import") })
+	before := unseenCount(t, cfg)
+
+	jar, _ := cookiejar.New(nil)
+	client := &http.Client{Jar: jar, Timeout: 10 * time.Second}
+	base := "http://" + addr
+	resp, err := client.PostForm(base+"/login", url.Values{"password": {"mot-de-passe-de-test"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	_ = resp.Body.Close()
+	if resp.Request.URL.Path != "/v/inbox" {
+		t.Fatalf("login did not reach the inbox: %s", resp.Request.URL)
+	}
+
+	subject := "URGENT-TEST web " + time.Now().Format("150405.000")
+	start := time.Now()
+	deliverSubject(t, cfg, subject)
+	get := func(p string) string {
+		r, err := client.Get(base + p)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer func() { _ = r.Body.Close() }()
+		b, _ := io.ReadAll(r.Body)
+		return string(b)
+	}
+	tgtest.WaitFor(t, 30*time.Second, func() bool {
+		page := get("/v/urgent")
+		return strings.Contains(page, subject) && strings.Contains(page, "Test integration.")
+	})
+	t.Logf("mail listed with its summary after %s", time.Since(start))
+	if !strings.Contains(get("/v/inbox"), `class="item unread`) {
+		t.Error("the new mail should show as unread")
+	}
+	if after := unseenCount(t, cfg); after != before+1 {
+		t.Fatalf("\\Seen flags changed while browsing: unseen %d -> %d (one new mail)", before, after)
 	}
 }
