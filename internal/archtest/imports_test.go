@@ -62,3 +62,25 @@ func TestLLMHasNoSideEffectImports(t *testing.T) {
 		}
 	}
 }
+
+// Rule: the web interface reaches the mailbox and the outside world only
+// through what cmd/mailpilot hands it. In phase 5 it is read-only, so it
+// imports nothing that can send, notify or change a mailbox.
+func TestWebIsReadOnly(t *testing.T) {
+	forbidden := []string{
+		module + "/internal/reply", module + "/internal/mailbox", module + "/internal/telegram",
+		module + "/internal/todoist", module + "/internal/app",
+	}
+	for pkg, imps := range imports(t) {
+		if pkg != module+"/internal/web" {
+			continue
+		}
+		for _, imp := range imps {
+			for _, f := range forbidden {
+				if imp == f {
+					t.Errorf("%s must not import %s", pkg, imp)
+				}
+			}
+		}
+	}
+}

@@ -1,0 +1,126 @@
+{{define "app.html"}}<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#1f6feb">
+<title>{{.Title}}</title>
+<link rel="manifest" href="/manifest.webmanifest">
+<link rel="icon" href="/static/icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="/static/icon-192.png">
+<link rel="stylesheet" href="/static/app.css">
+<script src="/static/app.js" defer></script>
+</head>
+<body class="{{if .Pane}}has-pane{{end}}" data-view="{{.View}}">
+<header class="top">
+  <a class="brand" href="/v/inbox" aria-label="mailpilot, boîte de réception">
+    <svg class="logo" aria-hidden="true"><use href="/static/icons.svg#logo"></use></svg><span>mail<b>pilot</b></span>
+  </a>
+  <div class="account" title="Compte surveillé">{{.Account}}</div>
+  <div class="live" id="live" title="Mise à jour en direct"><i></i><span>En direct</span></div>
+  <form method="post" action="/logout" class="logout">
+    <input type="hidden" name="csrf" value="{{.CSRF}}">
+    <button type="submit" class="ghost">Déconnexion</button>
+  </form>
+</header>
+<div class="shell">
+  <nav class="side" id="nav">{{template "nav" .}}</nav>
+  <section class="list" id="list" aria-label="{{.ViewTitle}}">{{template "listcol" .}}</section>
+  <main class="pane" id="pane">{{template "pane" .}}</main>
+</div>
+</body>
+</html>{{end}}
+
+{{define "nav"}}
+  <div class="nav-group">
+  {{range .Views}}{{if not .AI}}
+    <a class="nav-item{{if .Active}} active{{end}}" href="/v/{{.Name}}"><svg aria-hidden="true"><use href="/static/icons.svg#{{.Icon}}"></use></svg><span>{{.Title}}</span><em>{{.Count}}</em></a>
+  {{end}}{{end}}
+  </div>
+  <div class="nav-label"><svg aria-hidden="true"><use href="/static/icons.svg#spark"></use></svg>Vues IA</div>
+  <div class="nav-group">
+  {{range .Views}}{{if .AI}}
+    <a class="nav-item{{if .Active}} active{{end}} v-{{.Name}}" href="/v/{{.Name}}"><svg aria-hidden="true"><use href="/static/icons.svg#{{.Icon}}"></use></svg><span>{{.Title}}</span>{{if .Count}}<em>{{.Count}}</em>{{end}}</a>
+  {{end}}{{end}}
+  </div>
+  <div class="nav-foot">
+    <div>Envoi : {{if .SendEnabled}}<b class="on">activé</b> (double confirmation){{else}}<b>coupé</b>{{end}}</div>
+    <div>mailpilot {{.Version}}</div>
+  </div>
+{{end}}
+
+{{define "listcol"}}
+  <div class="list-head"><h1>{{.ViewTitle}}</h1></div>
+  <ul class="items">
+  {{range .Items}}
+    <li class="item{{if .Unread}} unread{{end}}{{if .Selected}} selected{{end}}{{if .Suspect}} suspect{{end}}" data-id="{{.ID}}">
+      <a href="{{.Href}}" data-pane>
+        <span class="prio p-{{if .Suspect}}suspect{{else}}{{.Prio}}{{end}}" title="{{if .Suspect}}Suspect{{else}}{{.PrioLabel}}{{end}}"></span>
+        <span class="row1"><span class="from">{{.FromName}}</span><span class="time">{{.Time}}</span></span>
+        <span class="subject">{{.Subject}}</span>
+        {{if .Summary}}<span class="summary"><svg aria-hidden="true"><use href="/static/icons.svg#spark"></use></svg>{{.Summary}}</span>
+        {{else if .Pending}}<span class="summary muted">Analyse en cours…</span>{{end}}
+        <span class="chips">
+          {{if .Suspect}}<span class="chip bad">Instructions IA ignorées</span>
+          {{else if .PrioLabel}}{{if or (eq .Prio "urgent") (eq .Prio "haute")}}<span class="chip p-{{.Prio}}">{{.PrioLabel}}</span>{{end}}{{end}}
+          {{if and .CatLabel (not .Suspect)}}<span class="chip">{{.CatLabel}}</span>{{end}}
+          {{if .TasksCreated}}<span class="chip ok" title="Rappels créés dans Todoist"><svg aria-hidden="true"><use href="/static/icons.svg#check"></use></svg>Todoist</span>{{end}}
+          {{if .TasksProposed}}<span class="chip wait" title="Rappels à confirmer">Rappel à confirmer</span>{{end}}
+          {{if .Draft}}<span class="chip draft">Brouillon prêt</span>{{end}}
+          {{if .Attach}}<svg class="clip" aria-label="Pièce jointe"><use href="/static/icons.svg#clip"></use></svg>{{end}}
+        </span>
+      </a>
+    </li>
+  {{else}}
+    <li class="empty">Aucun mail ici.</li>
+  {{end}}
+  </ul>
+  {{if .MoreHref}}<a class="more" href="{{.MoreHref}}">Plus anciens</a>{{end}}
+{{end}}
+
+{{define "pane"}}{{with .Pane}}
+  <article class="mail" data-id="{{.ID}}">
+    <a class="back" href="{{.BackHref}}" data-back>← Retour</a>
+    <h2 class="mail-subject">{{.Subject}}</h2>
+    {{if .Suspect}}<div class="alert"><svg aria-hidden="true"><use href="/static/icons.svg#shield"></use></svg><div><b>Mail suspect.</b> Il contient des instructions adressées à une IA : elles ont été ignorées. Aucune réponse ne sera rédigée automatiquement.</div></div>{{end}}
+    <section class="ai{{if .Suspect}} ai-suspect{{end}}" aria-label="Analyse IA">
+      <div class="ai-head"><svg aria-hidden="true"><use href="/static/icons.svg#spark"></use></svg><span>Analyse IA</span>
+        {{if .Analyzed}}{{if and .PrioLabel (not .Suspect)}}<span class="chip p-{{.Prio}}">{{.PrioLabel}}</span>{{end}}{{if .CatLabel}}<span class="chip">{{.CatLabel}}</span>{{end}}{{if .NeedsReply}}<span class="chip">Réponse attendue</span>{{end}}{{end}}
+      </div>
+      {{if .Analyzed}}
+        <p class="ai-summary">{{.Summary}}</p>
+        {{if .Actions}}
+        <h3>À faire</h3>
+        <ul class="actions">
+          {{range .Actions}}<li><span class="dot {{.StatusClass}}"></span><span class="a-text">{{.Text}}{{if .Due}} <span class="due">pour le {{.Due}}</span>{{end}}{{if .Unverified}} <span class="warn" title="La citation donnée par l'IA n'a pas été retrouvée dans le mail">citation non vérifiée</span>{{end}}</span><span class="a-status {{.StatusClass}}">{{.Status}}</span></li>{{end}}
+        </ul>
+        {{end}}
+        {{if .Reason}}<p class="ai-reason">Pourquoi : {{.Reason}}</p>{{end}}
+      {{else if .Failed}}
+        <p class="ai-summary muted">L'analyse automatique a échoué pour ce mail.</p>
+      {{else}}
+        <p class="ai-summary muted">Pas encore analysé, ou trié par une règle sans passer par l'IA.</p>
+      {{end}}
+    </section>
+    <div class="meta">
+      <div class="avatar" aria-hidden="true">{{initial .From}}</div>
+      <div class="who">
+        <div><b>{{if .From.Name}}{{.From.Name}}{{else}}{{.From.Email}}{{end}}</b> {{if .From.Name}}<span class="muted">&lt;{{.From.Email}}&gt;</span>{{end}}</div>
+        <div class="muted small">À : {{range $i, $a := .To}}{{if $i}}, {{end}}{{if $a.Name}}{{$a.Name}}{{else}}{{$a.Email}}{{end}}{{end}}{{if .Cc}} · Cc : {{range $i, $a := .Cc}}{{if $i}}, {{end}}{{if $a.Name}}{{$a.Name}}{{else}}{{$a.Email}}{{end}}{{end}}{{end}}</div>
+      </div>
+      <div class="muted small date">{{.Date}}</div>
+    </div>
+    {{if .Attachments}}<div class="atts">{{range .Attachments}}<span class="att"><svg aria-hidden="true"><use href="/static/icons.svg#clip"></use></svg>{{.}}</span>{{end}}</div>{{end}}
+    {{if .BodyPurged}}<p class="body muted">Le texte de ce mail a été effacé de mailpilot après la durée de conservation. Le résumé reste disponible ci-dessus.</p>
+    {{else}}<div class="body">{{.Body}}</div>{{if .HTMLOnly}}<p class="muted small">Ce mail n'existe qu'en HTML : la version texte ci-dessus en est extraite.</p>{{end}}{{end}}
+    {{if .Thread}}
+    <section class="thread"><h3>Dans ce fil</h3>
+      <ul>{{range .Thread}}<li{{if .Current}} class="current"{{end}}><a href="{{.Href}}" data-pane><span class="from">{{.FromName}}</span><span class="time">{{.Time}}</span>{{if .Summary}}<span class="summary">{{.Summary}}</span>{{end}}</a></li>{{end}}</ul>
+    </section>
+    {{end}}
+  </article>
+{{else}}
+  <div class="placeholder"><svg aria-hidden="true"><use href="/static/icons.svg#logo"></use></svg><p>Sélectionne un mail pour le lire avec son analyse.</p></div>
+{{end}}{{end}}
+
+{{define "list"}}<nav id="nav">{{template "nav" .}}</nav><section id="list">{{template "listcol" .}}</section>{{end}}

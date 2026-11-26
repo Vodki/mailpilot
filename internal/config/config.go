@@ -6,6 +6,8 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
+	"net"
+	"net/url"
 	"os"
 	"strings"
 	"time"
@@ -38,6 +40,7 @@ type Config struct {
 	Todoist     TodoistConfig  `yaml:"todoist"`
 	Digest      DigestConfig   `yaml:"digest"`
 	Retention   RetentionCfg   `yaml:"retention"`
+	Web         WebConfig      `yaml:"web"`
 
 	// Location is Timezone resolved at load time.
 	Location *time.Location `yaml:"-"`
@@ -132,6 +135,19 @@ type RetentionCfg struct {
 	BodyDays int `yaml:"body_days"`
 }
 
+// WebConfig configures the web interface (off by default). It listens on
+// the loopback interface unless allow_remote is set.
+type WebConfig struct {
+	Enabled     bool          `yaml:"enabled"`
+	Listen      string        `yaml:"listen"`
+	AllowRemote bool          `yaml:"allow_remote"`
+	PublicURL   string        `yaml:"public_url"`
+	SessionTTL  time.Duration `yaml:"session_ttl"`
+
+	// PasswordHash is an argon2id PHC string (mailpilot web-password).
+	PasswordHash Secret `yaml:"-"`
+}
+
 // LLM task names.
 const (
 	TaskTriage = "triage"
@@ -189,6 +205,7 @@ func Default() Config {
 		},
 		Digest:    DigestConfig{Times: []string{"08:30", "18:00"}},
 		Retention: RetentionCfg{BodyDays: 30},
+		Web:       WebConfig{Listen: "127.0.0.1:8484", SessionTTL: 30 * 24 * time.Hour},
 	}
 }
 
@@ -238,6 +255,7 @@ const (
 	EnvSMTPPassword  = "MAILPILOT_SMTP_PASSWORD"
 	EnvTelegramToken = "MAILPILOT_TELEGRAM_TOKEN"
 	EnvTodoistToken  = "MAILPILOT_TODOIST_TOKEN"
+	EnvWebPassword   = "MAILPILOT_WEB_PASSWORD_HASH"
 )
 
 func loadSecrets(cfg *Config, env Env) error {
@@ -255,6 +273,9 @@ func loadSecrets(cfg *Config, env Env) error {
 		return err
 	}
 	if cfg.Todoist.Token, err = secretFromEnv(env, EnvTodoistToken); err != nil {
+		return err
+	}
+	if cfg.Web.PasswordHash, err = secretFromEnv(env, EnvWebPassword); err != nil {
 		return err
 	}
 	return nil
@@ -357,6 +378,7 @@ func (c *Config) validate() error {
 	if c.Retention.BodyDays < 1 {
 		add("retention.body_days must be >= 1")
 	}
+	c.validateWeb(add)
 	return errors.Join(errs...)
 }
 
@@ -365,3 +387,36 @@ func (c IMAPConfig) Address() string { return fmt.Sprintf("%s:%d", c.Host, c.Por
 
 // Address returns host:port.
 func (c SMTPConfig) Address() string { return fmt.Sprintf("%s:%d", c.Host, c.Port) }
+
+func (c *Config) validateWeb(add func(string, ...any)) {
+	w := c.Web
+	if !w.Enabled {
+		return
+	}
+	host, port, err := net.SplitHostPort(w.Listen)
+	if err != nil || port == "" {
+		add("web.listen must be host:port, got %q", w.Listen)
+		return
+	}
+	ip := net.ParseIP(host)
+	loopback := host == "localhost" || (ip != nil && ip.IsLoopback())
+	if !loopback && !w.AllowRemote {
+		add("web.listen %q is not a loopback address: set web.allow_remote: true to expose the interface (behind HTTPS)", w.Listen)
+	}
+	if w.PasswordHash.Empty() {
+		add("web.enabled is true but %s is empty (generate it with: mailpilot web-password)", EnvWebPassword)
+	} else if !strings.HasPrefix(w.PasswordHash.Reveal(), "$argon2id$") {
+		add("%s must be an argon2id hash (mailpilot web-password)", EnvWebPassword)
+	}
+	if w.PublicURL != "" {
+		u, err := url.Parse(w.PublicURL)
+		if err != nil || (u.Scheme != "https" && u.Scheme != "http") || u.Host == "" {
+			add("web.public_url must be an absolute http(s) URL, got %q", w.PublicURL)
+		} else if u.Scheme != "https" && w.AllowRemote {
+			add("web.public_url must use https when web.allow_remote is true")
+		}
+	}
+	if w.SessionTTL < time.Hour || w.SessionTTL > 90*24*time.Hour {
+		add("web.session_ttl must be between 1h and 2160h")
+	}
+}

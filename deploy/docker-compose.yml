@@ -1,5 +1,8 @@
 # Exemple de déploiement sur un VPS. Aucun port n'est exposé : IMAP, SMTP,
 # Telegram (long polling) et le LLM sont des connexions sortantes.
+# L'interface web, si tu l'actives, n'est publiée que sur le loopback de
+# l'hôte (décommente `ports`, et dans config.yaml : web.listen 0.0.0.0:8484
+# avec web.allow_remote: true).
 #
 #   cp .env.example .env && $EDITOR .env
 #   cp -r config.example config && $EDITOR config/config.yaml
@@ -12,6 +15,7 @@ services:
     image: mailpilot:local
     restart: unless-stopped
     env_file: ../.env
+    # ports: ["127.0.0.1:8484:8484"]   # interface web, loopback de l'hôte seulement
     volumes:
       - ../config:/config:ro
       - mailpilot-data:/data

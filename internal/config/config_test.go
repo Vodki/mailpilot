@@ -112,3 +112,35 @@ func TestExampleConfigLoads(t *testing.T) {
 		t.Fatal("example config must keep send_enabled: false")
 	}
 }
+
+func TestWebConfig(t *testing.T) {
+	const hash = "$argon2id$v=19$m=65536,t=2,p=1$c2FsdA$aGFzaA"
+	cases := []struct {
+		name, yaml, hash, wantErr string
+	}{
+		{"off by default", "", "", ""},
+		{"loopback ok", "web:\n  enabled: true\n", hash, ""},
+		{"no hash", "web:\n  enabled: true\n", "", "MAILPILOT_WEB_PASSWORD_HASH is empty"},
+		{"not argon2", "web:\n  enabled: true\n", "$2a$10$x", "must be an argon2id hash"},
+		{"public refused", "web:\n  enabled: true\n  listen: 0.0.0.0:8484\n", hash, "not a loopback address"},
+		{"public allowed", "web:\n  enabled: true\n  listen: 0.0.0.0:8484\n  allow_remote: true\n  public_url: https://mail.example.com\n", hash, ""},
+		{"public needs https", "web:\n  enabled: true\n  listen: 0.0.0.0:8484\n  allow_remote: true\n  public_url: http://mail.example.com\n", hash, "must use https"},
+		{"bad listen", "web:\n  enabled: true\n  listen: nope\n", hash, "must be host:port"},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			path := writeFile(t, "config.yaml", "imap:\n  username: moi@example.com\n"+c.yaml)
+			env := map[string]string{}
+			if c.hash != "" {
+				env[EnvWebPassword] = c.hash
+			}
+			_, err := Load(path, envMap(env))
+			if c.wantErr == "" && err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if c.wantErr != "" && (err == nil || !strings.Contains(err.Error(), c.wantErr)) {
+				t.Fatalf("want %q, got %v", c.wantErr, err)
+			}
+		})
+	}
+}
