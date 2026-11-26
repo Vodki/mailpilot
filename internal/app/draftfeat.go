@@ -95,21 +95,22 @@ type draftRequest struct {
 	previous     string
 	literal      string // Louis typed the full text himself: no LLM
 	replyAll     bool
+	quiet        bool // web interface: no Telegram message for this version
 }
 
 // startDraft runs makeDraft in the background (LLM calls take seconds).
 func (a *App) startDraft(ctx context.Context, r draftRequest) {
 	a.goRun(func() {
-		if err := a.makeDraft(ctx, r); err != nil {
+		if _, err := a.makeDraft(ctx, r); err != nil {
 			a.log.Warn("draft failed", "message_pk", r.m.ID, "err", err)
 			a.sendText(ctx, "⚠️ Brouillon impossible : "+truncateRunes(err.Error(), 500))
 		}
 	})
 }
 
-func (a *App) makeDraft(ctx context.Context, r draftRequest) error {
+func (a *App) makeDraft(ctx context.Context, r draftRequest) (*store.Draft, error) {
 	if a.ops == nil {
-		return errors.New("brouillons non configurés")
+		return nil, errors.New("brouillons non configurés")
 	}
 	a.drafts.mu.Lock()
 	defer a.drafts.mu.Unlock()
@@ -117,7 +118,7 @@ func (a *App) makeDraft(ctx context.Context, r draftRequest) error {
 	orig := original(m)
 	to, cc := reply.Recipients(orig, a.self, r.replyAll)
 	if len(to) == 0 {
-		return reply.ErrNoRecipient
+		return nil, reply.ErrNoRecipient
 	}
 	body := strings.TrimSpace(r.literal)
 	if body == "" {
@@ -136,19 +137,19 @@ func (a *App) makeDraft(ctx context.Context, r draftRequest) error {
 		res, attempts, err := a.drafter.Load().Draft(ctx, in)
 		a.recordCalls(ctx, "draft", m.ID, attempts)
 		if err != nil {
-			return err
+			return nil, err
 		}
 		body = res.Body
 	}
 	built, err := reply.Build(orig, a.fromAddr(), to, cc, body, a.now(), a.cfg.Location)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	d := &store.Draft{MessagePK: m.ID, Body: body, Instructions: r.instructions, ReplyAll: r.replyAll,
 		To: toStoreAddrs(to), Cc: toStoreAddrs(cc), Subject: built.Subject, RFCMessageID: built.MessageID, Raw: built.Raw}
 	prev, err := a.st.NewDraftVersion(ctx, d)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	if prev != nil {
 		a.retireDraft(ctx, prev)
@@ -159,14 +160,18 @@ func (a *App) makeDraft(ctx context.Context, r draftRequest) error {
 		imapNote = "⚠️ Non enregistré dans Brouillons : " + truncateRunes(err.Error(), 200)
 	} else {
 		_ = a.st.SetDraftIMAP(ctx, d.ID, st.Folder, st.UIDValidity, st.UID)
+		d.IMAPFolder, d.IMAPUIDValidity, d.IMAPUID = st.Folder, st.UIDValidity, st.UID
 	}
 	a.audit(ctx, "mailpilot", "draft", fmt.Sprintf("message=%d draft=%d v=%d", m.ID, d.ID, d.Version))
+	if r.quiet {
+		return d, nil
+	}
 	text, complete := a.formatDraft(m, d, imapNote)
 	sent, err := a.send(ctx, text, telegram.SendOptions{Markup: a.draftKeyboard(ctx, d, complete)})
 	if err != nil {
-		return err
+		return d, err
 	}
-	return a.st.SetDraftTelegram(ctx, d.ID, sent.MessageID)
+	return d, a.st.SetDraftTelegram(ctx, d.ID, sent.MessageID)
 }
 
 // retireDraft removes a superseded or cancelled version from Drafts and
@@ -492,27 +497,52 @@ func (a *App) confirmSend(ctx context.Context, q *telegram.CallbackQuery, c *sto
 		answer(truncateRunes(why, 190))
 		return
 	}
-	// Recipients are recomputed from the headers and must match what Louis
-	// confirmed.
-	to, cc := reply.Recipients(original(m), a.self, d.ReplyAll)
-	if addrLine(toStoreAddrs(to)) != addrLine(d.To) || addrLine(toStoreAddrs(cc)) != addrLine(d.Cc) {
+	note, err := a.sendDraft(ctx, d, m, "telegram", func() { answer("Envoi…") })
+	switch {
+	case errors.Is(err, errRecipients):
 		answer("Destinataires incohérents : envoi refusé.")
-		a.log.Error("recipient mismatch at send time", "draft_id", d.ID)
 		return
-	}
-	if ok, err := a.st.TransitionDraft(ctx, d.ID, store.DraftActive, store.DraftSending, "", a.now()); err != nil || !ok {
+	case errors.Is(err, errAlreadyHandled):
 		answer("Déjà en cours d'envoi.")
 		return
+	case err != nil:
+		a.sendText(ctx, "❌ Échec de l'envoi : "+truncateRunes(err.Error(), 300)+"\nLe brouillon reste dans Brouillons.")
+		return
 	}
-	answer("Envoi…")
+	if q.Message != nil {
+		_ = a.tg.EditMarkup(ctx, a.cfg.Telegram.ChatID, q.Message.MessageID, nil)
+	}
+	if note != "" {
+		note = "\n⚠️ " + note
+	}
+	a.sendText(ctx, "✅ Réponse envoyée à "+addrLine(d.To)+"."+note)
+}
+
+var errRecipients = errors.New("destinataires incohérents : envoi refusé")
+
+// sendDraft sends the active draft d of message m. Recipients are
+// recomputed from the stored headers and must match what Louis confirmed;
+// the draft moves active → sending → sent atomically, so a double click
+// sends once (started runs once that transition is won). The returned note reports a failed copy to Sent.
+func (a *App) sendDraft(ctx context.Context, d *store.Draft, m *store.Message, actor string, started func()) (string, error) {
+	to, cc := reply.Recipients(original(m), a.self, d.ReplyAll)
+	if addrLine(toStoreAddrs(to)) != addrLine(d.To) || addrLine(toStoreAddrs(cc)) != addrLine(d.Cc) {
+		a.log.Error("recipient mismatch at send time", "draft_id", d.ID)
+		return "", errRecipients
+	}
+	if ok, err := a.st.TransitionDraft(ctx, d.ID, store.DraftActive, store.DraftSending, "", a.now()); err != nil || !ok {
+		return "", errAlreadyHandled
+	}
+	if started != nil {
+		started()
+	}
 	rcpts := reply.Emails(to, cc)
-	a.audit(ctx, "telegram", "send_confirmed", fmt.Sprintf("draft=%d message=%d rcpts=%d", d.ID, d.MessagePK, len(rcpts)))
+	a.audit(ctx, actor, "send_confirmed", fmt.Sprintf("draft=%d message=%d rcpts=%d", d.ID, d.MessagePK, len(rcpts)))
 	if err := a.sendMail(ctx, a.cfg.SMTP, a.fromAddr().Email, rcpts, d.Raw); err != nil {
 		_, _ = a.st.TransitionDraft(ctx, d.ID, store.DraftSending, store.DraftActive, truncateRunes(err.Error(), 500), a.now())
 		a.audit(ctx, "mailpilot", "send_failed", fmt.Sprintf("draft=%d", d.ID))
 		a.log.Warn("smtp send failed", "draft_id", d.ID, "err", err)
-		a.sendText(ctx, "❌ Échec de l'envoi : "+truncateRunes(err.Error(), 300)+"\nLe brouillon reste dans Brouillons.")
-		return
+		return "", err
 	}
 	_, _ = a.st.TransitionDraft(ctx, d.ID, store.DraftSending, store.DraftSent, "", a.now())
 	a.audit(ctx, "mailpilot", "sent", fmt.Sprintf("draft=%d message=%d", d.ID, d.MessagePK))
@@ -520,14 +550,11 @@ func (a *App) confirmSend(ctx context.Context, q *telegram.CallbackQuery, c *sto
 	note := ""
 	if a.cfg.IMAP.SaveSent {
 		if _, err := a.ops.AppendSent(ctx, d.Raw); err != nil {
-			note = "\n⚠️ Copie dans Envoyés impossible : " + truncateRunes(err.Error(), 150)
+			note = "Copie dans Envoyés impossible : " + truncateRunes(err.Error(), 150)
 		}
 	}
 	a.retireDraft(ctx, d)
-	if q.Message != nil {
-		_ = a.tg.EditMarkup(ctx, a.cfg.Telegram.ChatID, q.Message.MessageID, nil)
-	}
-	a.sendText(ctx, "✅ Réponse envoyée à "+addrLine(d.To)+"."+note)
+	return note, nil
 }
 
 // takeEdit returns the draft awaiting instructions, if any.

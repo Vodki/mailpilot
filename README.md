@@ -193,6 +193,21 @@ Ce que tu peux faire depuis l'interface :
   conservation : il est relu sur le serveur à l'affichage, sans être
   enregistré de nouveau.
 
+- **Répondre** (ou répondre à tous) : « Répondre avec l'IA » rédige un
+  brouillon à partir du mail, de son fil et de ton profil. Tu peux le
+  modifier directement, ou le faire réécrire avec une consigne (« plus
+  court, propose mardi 10 h »). Sur un mail suspect, l'IA ne rédige rien :
+  tu écris toi-même. Chaque version est rangée dans ton dossier Brouillons.
+- **Envoyer**, avec la même double validation que sur Telegram : le premier
+  clic affiche exactement les destinataires, l'objet et le texte, le second
+  envoie. Cette confirmation ne sert qu'une fois et expire au bout de
+  10 minutes. Elle ne vaut que pour la version affichée. Les destinataires
+  viennent toujours des en-têtes du mail, jamais du texte de l'IA.
+  L'envoi reste coupé tant que `smtp.send_enabled` vaut `false`, et la pause
+  ainsi que la limite d'envois par heure s'appliquent.
+- **Rappels** : un rappel proposé par l'IA s'ajoute à Todoist ou s'ignore
+  depuis la fiche du mail.
+
 Les dossiers d'archives et de corbeille sont détectés automatiquement
 (SPECIAL-USE, ou un nom courant comme « Archive » ou « Corbeille »). Sinon,
 renseigne `imap.archive_folder` et `imap.trash_folder`. Les mails déplacés

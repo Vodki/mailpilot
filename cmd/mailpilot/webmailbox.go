@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 
+	"github.com/Vodki/mailpilot/internal/app"
 	"github.com/Vodki/mailpilot/internal/mailbox"
 	"github.com/Vodki/mailpilot/internal/web"
 )
@@ -74,4 +75,30 @@ func (m webMailbox) Move(ctx context.Context, at web.Loc, to web.Target) (*web.L
 		return nil, mapErr(err)
 	}
 	return &web.Loc{Folder: res.Folder, UIDValidity: res.UIDValidity, UID: res.UID}, nil
+}
+
+// webComposer adapts the app's draft and send flow to the web interface.
+type webComposer struct{ a *app.App }
+
+func (c webComposer) Draft(ctx context.Context, r web.DraftRequest) (int64, error) {
+	d, err := c.a.WebDraft(ctx, app.WebDraftRequest{MessagePK: r.MessagePK, Instructions: r.Instructions, Body: r.Body,
+		ReplyAll: r.ReplyAll, Regenerate: r.Regenerate})
+	if err != nil {
+		return 0, err
+	}
+	return d.ID, nil
+}
+
+func (c webComposer) CancelDraft(ctx context.Context, id int64) error {
+	return c.a.WebCancelDraft(ctx, id)
+}
+
+func (c webComposer) SendGate(ctx context.Context) string { return c.a.WebSendGate(ctx) }
+
+func (c webComposer) Send(ctx context.Context, id int64, version int) (string, error) {
+	return c.a.WebSend(ctx, id, version)
+}
+
+func (c webComposer) Todo(ctx context.Context, actionID int64, add bool) error {
+	return c.a.WebTodo(ctx, actionID, add)
 }

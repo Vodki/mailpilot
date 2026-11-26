@@ -2,10 +2,14 @@ package web
 
 import (
 	"context"
+	"encoding/json"
+	"errors"
 	"slices"
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/Vodki/mailpilot/internal/store"
 )
 
 // fakeMailbox is an in-memory account. writes counts the calls that change
@@ -148,3 +152,54 @@ func (f *fakeMailbox) Move(_ context.Context, at Loc, to Target) (*Loc, error) {
 	df.msgs[uid] = m
 	return &Loc{Folder: dest, UIDValidity: df.val, UID: uid}, nil
 }
+
+// fakeComposer stores drafts directly, like the app would, and records sends.
+type fakeComposer struct {
+	f     *fixture
+	gate  string
+	sends []int64
+	todos map[int64]bool
+}
+
+func (c *fakeComposer) Draft(ctx context.Context, r DraftRequest) (int64, error) {
+	body := r.Body
+	if body == "" {
+		body = "Réponse de l'IA. " + r.Instructions
+	}
+	d := &store.Draft{MessagePK: r.MessagePK, Body: body, Instructions: r.Instructions, ReplyAll: r.ReplyAll,
+		To: []store.Address{{Name: "Pierre Lambert", Email: "pierre@example.test"}}, Subject: "RE: x", IMAPFolder: "Drafts", Raw: []byte("x")}
+	if _, err := c.f.st.NewDraftVersion(ctx, d); err != nil {
+		return 0, err
+	}
+	return d.ID, nil
+}
+
+func (c *fakeComposer) CancelDraft(ctx context.Context, id int64) error {
+	_, err := c.f.st.TransitionDraft(ctx, id, store.DraftActive, store.DraftCancelled, "", c.f.now)
+	return err
+}
+
+func (c *fakeComposer) SendGate(context.Context) string { return c.gate }
+
+func (c *fakeComposer) Send(ctx context.Context, id int64, version int) (string, error) {
+	if c.gate != "" {
+		return "", errors.New(c.gate)
+	}
+	d, err := c.f.st.GetDraft(ctx, id)
+	if err != nil || d.Version != version || d.Status != store.DraftActive {
+		return "", errors.New("brouillon changé")
+	}
+	c.sends = append(c.sends, id)
+	_, _ = c.f.st.TransitionDraft(ctx, id, store.DraftActive, store.DraftSent, "", c.f.now)
+	return "", nil
+}
+
+func (c *fakeComposer) Todo(_ context.Context, id int64, add bool) error {
+	if c.todos == nil {
+		c.todos = map[int64]bool{}
+	}
+	c.todos[id] = add
+	return nil
+}
+
+func jsonUnmarshal(b []byte, v any) error { return json.Unmarshal(b, v) }

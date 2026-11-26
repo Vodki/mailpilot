@@ -29,6 +29,7 @@
   <main class="pane" id="pane">{{template "pane" .}}</main>
 </div>
 <div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
+<dialog id="confirm" class="confirm-dialog" aria-label="Confirmer l'envoi"></dialog>
 </body>
 </html>{{end}}
 
@@ -102,7 +103,7 @@
         {{if .Actions}}
         <h3>À faire</h3>
         <ul class="actions">
-          {{range .Actions}}<li><span class="dot {{.StatusClass}}"></span><span class="a-text">{{.Text}}{{if .Due}} <span class="due">pour le {{.Due}}</span>{{end}}{{if .Unverified}} <span class="warn" title="La citation donnée par l'IA n'a pas été retrouvée dans le mail">citation non vérifiée</span>{{end}}</span><span class="a-status {{.StatusClass}}">{{.Status}}</span></li>{{end}}
+          {{range .Actions}}<li><span class="dot {{.StatusClass}}"></span><span class="a-text">{{.Text}}{{if .Due}} <span class="due">pour le {{.Due}}</span>{{end}}{{if .Unverified}} <span class="warn" title="La citation donnée par l'IA n'a pas été retrouvée dans le mail">citation non vérifiée</span>{{end}}</span><span class="a-status {{.StatusClass}}">{{.Status}}</span>{{if .Decide}}<span class="a-decide"><form method="post" action="/rappel" data-ajax><input type="hidden" name="csrf" value="{{$.CSRF}}"><input type="hidden" name="action" value="{{.ID}}"><input type="hidden" name="op" value="ajouter"><button type="submit" class="tool small-btn">Ajouter à Todoist</button></form><form method="post" action="/rappel" data-ajax><input type="hidden" name="csrf" value="{{$.CSRF}}"><input type="hidden" name="action" value="{{.ID}}"><input type="hidden" name="op" value="ignorer"><button type="submit" class="ghost small-btn">Ignorer</button></form></span>{{end}}</li>{{end}}
         </ul>
         {{end}}
         {{if .Reason}}<p class="ai-reason">Pourquoi : {{.Reason}}</p>{{end}}
@@ -126,6 +127,7 @@
     {{if .Missing}}<p class="body muted">Ce mail n'est plus dans ce dossier : il a été déplacé ou supprimé depuis un autre logiciel.</p>
     {{else if .BodyPurged}}<p class="body muted">Le texte de ce mail a été effacé de mailpilot après la durée de conservation. Le résumé reste disponible ci-dessus.</p>
     {{else}}<div class="body">{{.Body}}</div>{{if .HTMLOnly}}<p class="muted small">Ce mail n'existe qu'en HTML : la version texte ci-dessus en est extraite.</p>{{end}}{{if and .FromServer .ID (not .ByLoc)}}<p class="muted small">Texte relu sur le serveur : mailpilot l'avait effacé après la durée de conservation.</p>{{end}}{{end}}
+    {{if or .Draft .CanReply}}{{template "compose" .}}{{end}}
     {{if .Thread}}
     <section class="thread"><h3>Dans ce fil</h3>
       <ul>{{range .Thread}}<li{{if .Current}} class="current"{{end}}><a href="{{.Href}}" data-pane><span class="from">{{.FromName}}</span><span class="time">{{.Time}}</span>{{if .Summary}}<span class="summary">{{.Summary}}</span>{{end}}</a></li>{{end}}</ul>
@@ -148,4 +150,57 @@
       <form method="post" action="/action">{{template "actfields" .}}<input type="hidden" name="op" value="{{if .Unread}}lu{{else}}nonlu{{end}}"><button type="submit" class="tool" data-key="u" data-seen-toggle title="{{if .Unread}}Marquer comme lu{{else}}Marquer comme non lu{{end}} (u)" aria-label="{{if .Unread}}Marquer comme lu{{else}}Marquer comme non lu{{end}}"><svg aria-hidden="true"><use href="/static/icons.svg#{{if .Unread}}mailopen{{else}}mail{{end}}"></use></svg><span>{{if .Unread}}Marquer lu{{else}}Non lu{{end}}</span></button></form>
       {{if .Moves}}<form method="post" action="/action" class="move">{{template "actfields" .}}<input type="hidden" name="op" value="deplacer"><svg aria-hidden="true"><use href="/static/icons.svg#move"></use></svg><select name="dest" aria-label="Déplacer vers" data-key="v">{{range .Moves}}<option value="{{.Name}}">{{.Title}}</option>{{end}}</select><button type="submit" class="tool">Déplacer</button></form>{{end}}
     </div>
+{{end}}
+
+{{define "idfields"}}<input type="hidden" name="csrf" value="{{.CSRF}}"><input type="hidden" name="id" value="{{.ID}}"><input type="hidden" name="back" value="{{.ListHref}}?m={{.ID}}">{{end}}
+
+{{define "compose"}}
+    <section class="compose" id="compose" aria-label="Répondre">
+    {{with .Draft}}
+      <div class="compose-head"><h3>Ta réponse</h3><span class="chip draft">Brouillon v{{.Version}}</span>{{if .InDrafts}}<span class="muted small">enregistré dans Brouillons</span>{{end}}</div>
+      <div class="rcpt small"><div><span class="muted">À :</span> {{.To}}</div>{{if .Cc}}<div><span class="muted">Cc :</span> {{.Cc}}</div>{{end}}<div><span class="muted">Objet :</span> {{.Subject}}</div></div>
+      <form method="post" action="/brouillon" class="editor" data-ajax>{{template "idfields" $}}<input type="hidden" name="op" value="enregistrer">
+        <textarea name="body" rows="12" aria-label="Texte de la réponse" maxlength="100000" required>{{.Body}}</textarea>
+        <div class="compose-row"><button type="submit" class="tool">Enregistrer mes modifications</button>
+          <label class="small muted"><input type="checkbox" name="all" value="1"{{if .ReplyAll}} checked{{end}}> Répondre à tous</label></div>
+      </form>
+      {{if not $.Suspect}}<form method="post" action="/brouillon" class="regen" data-ajax data-busy="L'IA réécrit ta réponse…">{{template "idfields" $}}<input type="hidden" name="op" value="regenerer">{{if .ReplyAll}}<input type="hidden" name="all" value="1">{{end}}
+        <input type="text" name="instructions" maxlength="2000" placeholder="Consigne pour l'IA : plus court, propose mardi 10 h…" aria-label="Consigne pour l'IA">
+        <button type="submit" class="tool"><svg aria-hidden="true"><use href="/static/icons.svg#spark"></use></svg><span>Régénérer</span></button>
+      </form>{{end}}
+      <div class="compose-row send-row">
+        <form method="post" action="/envoi/preparer" class="send-form"><input type="hidden" name="csrf" value="{{$.CSRF}}"><input type="hidden" name="draft" value="{{.ID}}"><input type="hidden" name="version" value="{{.Version}}">
+          <button type="submit"{{if .SendBlocked}} disabled{{end}}><svg aria-hidden="true"><use href="/static/icons.svg#send"></use></svg> Envoyer…</button></form>
+        <form method="post" action="/brouillon" data-ajax>{{template "idfields" $}}<input type="hidden" name="op" value="abandonner"><input type="hidden" name="draft" value="{{.ID}}"><button type="submit" class="ghost">Supprimer le brouillon</button></form>
+      </div>
+      {{if .SendBlocked}}<p class="muted small send-blocked">{{.SendBlocked}}</p>{{end}}
+    {{else}}
+      <div class="compose-row">
+      {{if .Suspect}}<p class="muted small">Mail suspect : l'IA ne rédige pas de réponse. Tu peux l'écrire toi-même.</p>
+      {{else}}
+        <form method="post" action="/brouillon" data-ajax data-busy="L'IA rédige ta réponse…">{{template "idfields" .}}<input type="hidden" name="op" value="nouveau"><button type="submit"><svg aria-hidden="true"><use href="/static/icons.svg#spark"></use></svg> Répondre avec l'IA</button></form>
+        <form method="post" action="/brouillon" data-ajax data-busy="L'IA rédige ta réponse…">{{template "idfields" .}}<input type="hidden" name="op" value="nouveau"><input type="hidden" name="all" value="1"><button type="submit" class="tool">Répondre à tous</button></form>
+      {{end}}
+      </div>
+      <details class="write"{{if .Suspect}} open{{end}}><summary>Écrire moi-même</summary>
+        <form method="post" action="/brouillon" class="editor" data-ajax>{{template "idfields" .}}<input type="hidden" name="op" value="enregistrer">
+          <textarea name="body" rows="8" maxlength="100000" required aria-label="Texte de la réponse"></textarea>
+          <div class="compose-row"><button type="submit" class="tool">Enregistrer le brouillon</button><label class="small muted"><input type="checkbox" name="all" value="1"> Répondre à tous</label></div>
+        </form>
+      </details>
+    {{end}}
+    </section>
+{{end}}
+
+{{define "confirm"}}
+  <form method="dialog" class="confirm-close"><button class="ghost" aria-label="Fermer">✕</button></form>
+  <h2>Envoyer cette réponse ?</h2>
+  <dl class="confirm-meta"><dt>À</dt><dd>{{.C.To}}</dd>{{if .C.Cc}}<dt>Cc</dt><dd>{{.C.Cc}}</dd>{{end}}<dt>Objet</dt><dd>{{.C.Subject}}</dd></dl>
+  {{if .C.ReplyToElsewhere}}<p class="alert small">{{.C.ReplyToElsewhere}}</p>{{end}}
+  <div class="confirm-body">{{.C.Body}}</div>
+  <p class="muted small">Brouillon v{{.C.Version}}, exactement tel qu'affiché, suivi du message cité. Cette confirmation ne sert qu'une fois et expire dans 10 minutes.</p>
+  <div class="compose-row">
+    <form method="post" action="/envoi/confirmer" data-ajax data-busy="Envoi…"><input type="hidden" name="csrf" value="{{.CSRF}}"><input type="hidden" name="token" value="{{.C.Token}}"><button type="submit">Oui, envoyer</button></form>
+    <form method="dialog"><button class="ghost">Annuler</button></form>
+  </div>
 {{end}}

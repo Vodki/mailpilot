@@ -107,7 +107,7 @@ button.ghost:hover { background: var(--hover); color: var(--text); }
 .toolbar .move { margin-left: auto; }
 .toolbar .move > svg { color: var(--muted); }
 .toolbar select { font: inherit; padding: 6px 8px; border-radius: 8px; border: 1px solid var(--line); background: var(--panel); color: var(--text); max-width: 180px; }
-.toast { position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%); z-index: 10; display: flex; align-items: center; gap: 14px;
+.toast { position: fixed; right: 24px; bottom: 24px; z-index: 10; display: flex; align-items: center; gap: 14px;
   background: var(--text); color: var(--panel); padding: 10px 16px; border-radius: 10px; box-shadow: 0 6px 24px rgba(0,0,0,.18); max-width: calc(100vw - 32px); }
 .toast[hidden] { display: none; }
 .toast button { background: transparent; color: var(--accent-soft); padding: 2px 6px; text-decoration: underline; }
@@ -148,6 +148,41 @@ button.ghost:hover { background: var(--hover); color: var(--text); }
 .placeholder { height: 100%; display: grid; place-content: center; justify-items: center; color: var(--muted); gap: 6px; }
 .placeholder svg { width: 54px; height: 54px; color: var(--line); }
 
+/* replies */
+.compose { position: relative; margin-top: 24px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--panel); padding: 14px 16px; display: grid; gap: 10px; }
+.compose-head { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.compose-head h3 { white-space: nowrap; }
+.compose-head h3 { margin: 0; font-size: 15px; }
+.compose-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.compose-row form { margin: 0; }
+.compose button svg { width: 16px; height: 16px; vertical-align: -3px; }
+.compose label { display: inline-flex; align-items: center; gap: 6px; }
+.rcpt { display: grid; gap: 2px; overflow-wrap: anywhere; }
+.compose textarea, .compose input[type=text] { width: 100%; font: inherit; color: var(--text); background: var(--bg); border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; }
+.compose textarea { resize: vertical; min-height: 140px; line-height: 1.55; }
+.compose textarea:focus, .compose input[type=text]:focus { outline: 2px solid var(--accent); outline-offset: 1px; }
+.editor { display: grid; gap: 8px; margin: 0; }
+.regen { display: flex; gap: 8px; margin: 0; }
+.regen input { flex: 1; }
+.send-row { justify-content: space-between; }
+button:disabled { opacity: .55; cursor: not-allowed; }
+.write summary { cursor: pointer; color: var(--accent); font-weight: 600; padding: 4px 0; }
+.write[open] summary { margin-bottom: 8px; }
+.compose.busy > * { opacity: .35; pointer-events: none; }
+.compose.busy::after { content: attr(data-busy-text); position: absolute; inset: 0; display: grid; place-items: center; font-weight: 600; color: var(--ai); }
+.a-decide { display: flex; gap: 4px; margin-left: 6px; }
+.a-decide form { margin: 0; }
+.small-btn { padding: 3px 8px; font-size: 12.5px; }
+.confirm-dialog { width: min(640px, calc(100vw - 32px)); max-height: calc(100vh - 48px); border: 1px solid var(--line); border-radius: 14px; background: var(--panel); color: var(--text); padding: 22px 24px; }
+.confirm-dialog::backdrop { background: rgba(10, 16, 24, .45); }
+.confirm-dialog h2 { margin: 0 0 12px; font-size: 19px; }
+.confirm-close { position: absolute; right: 12px; top: 10px; margin: 0; }
+.confirm-meta { display: grid; grid-template-columns: auto 1fr; gap: 4px 12px; margin: 0 0 12px; }
+.confirm-meta dt { color: var(--muted); }
+.confirm-meta dd { margin: 0; overflow-wrap: anywhere; font-weight: 600; }
+.confirm-body { white-space: pre-wrap; overflow-wrap: anywhere; background: var(--bg); border: 1px solid var(--line); border-radius: 8px; padding: 12px; max-height: 40vh; overflow-y: auto; }
+.confirm-dialog.busy > * { opacity: .4; pointer-events: none; }
+
 /* login */
 .login-page { display: grid; place-items: center; min-height: 100vh; padding: 16px; }
 .login { width: min(360px, 100%); background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: 28px; display: grid; gap: 10px; text-align: center; }
@@ -176,7 +211,8 @@ button.ghost:hover { background: var(--hover); color: var(--text); }
   .meta { flex-wrap: wrap; }
   .who { overflow-wrap: anywhere; }
   .meta .date { flex-basis: 100%; padding-left: 50px; }
-  .tool span { display: none; }
+  .toolbar .tool span { display: none; }
+  .actions li { flex-wrap: wrap; }
   .toolbar .move { margin-left: 0; }
-  .toast { bottom: calc(16px + env(safe-area-inset-bottom)); }
+  .toast { left: 16px; right: 16px; bottom: calc(16px + env(safe-area-inset-bottom)); }
 }
